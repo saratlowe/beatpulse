@@ -1,17 +1,21 @@
-export type HomeStackParamList = {
-  HomeMain: undefined;
-  TapSession: undefined;
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
+export type LogStackParamList = {
+  LogEventMain: undefined;
+  TapSession: { mode?: 'relive' } | undefined;
   RefineVibe: undefined;
   PulseSignature: undefined;
   FriendMatch: undefined;
+  EventRecommendations: undefined;
 };
 
-export type SearchStackParamList = {
-  SearchMain: undefined;
+export type HomeStackParamList = {
+  HomeMain: undefined;
 };
 
 export type DiscoverStackParamList = {
   DiscoverMain: undefined;
+  FriendPulseDetail: { friendId: string };
 };
 
 export type ProfileStackParamList = {
@@ -20,7 +24,7 @@ export type ProfileStackParamList = {
 
 export type RootTabParamList = {
   Home: undefined;
-  Search: undefined;
-  Discover: undefined;
+  LogEvent: NavigatorScreenParams<LogStackParamList> | undefined;
+  Discover: NavigatorScreenParams<DiscoverStackParamList> | undefined;
   Profile: undefined;
 };

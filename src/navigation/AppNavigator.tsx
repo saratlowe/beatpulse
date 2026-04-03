@@ -3,25 +3,27 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DiscoverScreen } from '../screens/DiscoverScreen';
+import { FriendPulseDetailScreen } from '../screens/FriendPulseDetailScreen';
+import { EventRecommendationsScreen } from '../screens/EventRecommendationsScreen';
 import { FriendMatchScreen } from '../screens/FriendMatchScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { LogEventScreen } from '../screens/LogEventScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { PulseSignatureScreen } from '../screens/PulseSignatureScreen';
 import { RefineVibeScreen } from '../screens/RefineVibeScreen';
-import { SearchScreen } from '../screens/SearchScreen';
 import { TapSessionScreen } from '../screens/TapSessionScreen';
 import { colors } from '../theme';
 import type {
   DiscoverStackParamList,
   HomeStackParamList,
+  LogStackParamList,
   ProfileStackParamList,
   RootTabParamList,
-  SearchStackParamList,
 } from './types';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
-const SearchStack = createNativeStackNavigator<SearchStackParamList>();
+const LogStack = createNativeStackNavigator<LogStackParamList>();
 const DiscoverStack = createNativeStackNavigator<DiscoverStackParamList>();
 const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -37,63 +39,59 @@ const navTheme = {
   },
 };
 
+const stackScreenOpts = {
+  headerStyle: { backgroundColor: colors.bg },
+  headerTintColor: colors.text,
+  headerTitleStyle: { fontWeight: '600' as const },
+  headerShadowVisible: false,
+  contentStyle: { backgroundColor: colors.bg },
+};
+
 function HomeStackNavigator() {
   return (
-    <HomeStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: '600' },
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.bg },
-      }}
-    >
+    <HomeStack.Navigator screenOptions={stackScreenOpts}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} options={{ title: 'Home' }} />
-      <HomeStack.Screen
-        name="TapSession"
-        component={TapSessionScreen}
-        options={{ title: 'Listen + tap' }}
-      />
-      <HomeStack.Screen name="RefineVibe" component={RefineVibeScreen} options={{ title: 'Refine' }} />
-      <HomeStack.Screen
-        name="PulseSignature"
-        component={PulseSignatureScreen}
-        options={{ title: 'Pulse signature' }}
-      />
-      <HomeStack.Screen name="FriendMatch" component={FriendMatchScreen} options={{ title: 'Crowd' }} />
     </HomeStack.Navigator>
   );
 }
 
-function SearchStackNavigator() {
+function LogStackNavigator() {
   return (
-    <SearchStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.bg },
-      }}
-    >
-      <SearchStack.Screen name="SearchMain" component={SearchScreen} options={{ title: 'Search' }} />
-    </SearchStack.Navigator>
+    <LogStack.Navigator initialRouteName="LogEventMain" screenOptions={stackScreenOpts}>
+      <LogStack.Screen name="LogEventMain" component={LogEventScreen} options={{ title: 'Log event' }} />
+      <LogStack.Screen
+        name="TapSession"
+        component={TapSessionScreen}
+        options={{ title: 'Relive set' }}
+      />
+      <LogStack.Screen name="RefineVibe" component={RefineVibeScreen} options={{ title: 'Refine' }} />
+      <LogStack.Screen
+        name="PulseSignature"
+        component={PulseSignatureScreen}
+        options={{ title: 'Pulse signature' }}
+      />
+      <LogStack.Screen name="FriendMatch" component={FriendMatchScreen} options={{ title: 'Crowd match' }} />
+      <LogStack.Screen
+        name="EventRecommendations"
+        component={EventRecommendationsScreen}
+        options={{ title: 'Events for you' }}
+      />
+    </LogStack.Navigator>
   );
 }
 
 function DiscoverStackNavigator() {
   return (
-    <DiscoverStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.bg },
-      }}
-    >
+    <DiscoverStack.Navigator screenOptions={stackScreenOpts}>
       <DiscoverStack.Screen
         name="DiscoverMain"
         component={DiscoverScreen}
         options={{ title: 'Discover' }}
+      />
+      <DiscoverStack.Screen
+        name="FriendPulseDetail"
+        component={FriendPulseDetailScreen}
+        options={{ title: 'Compare pulse' }}
       />
     </DiscoverStack.Navigator>
   );
@@ -101,14 +99,7 @@ function DiscoverStackNavigator() {
 
 function ProfileStackNavigator() {
   return (
-    <ProfileStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.bg },
-      }}
-    >
+    <ProfileStack.Navigator screenOptions={stackScreenOpts}>
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: 'Profile' }} />
     </ProfileStack.Navigator>
   );
@@ -136,10 +127,14 @@ export function AppNavigator() {
           }}
         />
         <Tab.Screen
-          name="Search"
-          component={SearchStackNavigator}
+          name="LogEvent"
+          component={LogStackNavigator}
           options={{
-            tabBarIcon: ({ color, size }) => <MaterialIcons name="search" size={size} color={color} />,
+            title: 'Log',
+            tabBarLabel: 'Log event',
+            tabBarIcon: ({ color, size }) => (
+              <MaterialIcons name="add-circle-outline" size={size} color={color} />
+            ),
           }}
         />
         <Tab.Screen

@@ -2,9 +2,30 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import { colors } from '../theme';
 
-export function MiniPulseBars({ vector, barCount = 24 }: { vector: number[]; barCount?: number }) {
+type Props = {
+  /** 12-D (or any) signature — cyclic sample when no `samples` */
+  vector?: number[];
+  /** Time-series samples (e.g. waveform bins); resampled to `barCount` */
+  samples?: number[];
+  barCount?: number;
+};
+
+export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
   const heights = useMemo(() => {
-    const base = vector.length ? vector : [0.5];
+    if (samples?.length) {
+      const out: number[] = [];
+      for (let i = 0; i < barCount; i++) {
+        const t = (i / Math.max(barCount - 1, 1)) * (samples.length - 1);
+        const j = Math.floor(t);
+        const f = t - j;
+        const a = samples[j] ?? 0;
+        const b = samples[j + 1] ?? a;
+        const v = a + f * (b - a);
+        out.push(Math.max(0, Math.min(1, v)));
+      }
+      return out;
+    }
+    const base = vector?.length ? vector : [0.5];
     const out: number[] = [];
     for (let i = 0; i < barCount; i++) {
       const v = base[i % base.length];
@@ -12,7 +33,7 @@ export function MiniPulseBars({ vector, barCount = 24 }: { vector: number[]; bar
       out.push(Math.max(0.15, Math.min(1, v + wobble)));
     }
     return out;
-  }, [vector, barCount]);
+  }, [vector, samples, barCount]);
 
   const maxH = 52;
   return (

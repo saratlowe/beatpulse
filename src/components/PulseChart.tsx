@@ -4,30 +4,52 @@ import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { colors, font } from '../theme';
 
 type Props = {
-  vector: number[];
+  /** Tap-aligned bins (preferred). Flat/zero where there were no taps in that slice of the track. */
+  waveform?: number[] | null;
+  /** Legacy: 12-D signature — only used if waveform is missing */
+  vector?: number[];
   width: number;
   height: number;
   timeLabels?: string[];
 };
 
-export function PulseChart({ vector, width, height, timeLabels }: Props) {
+function waveformToPath(wave: number[], width: number, height: number): string {
+  const n = wave.length;
+  if (n < 2) return '';
+  const step = width / (n - 1);
+  const bottom = height - 4;
+  const topPad = 10;
+  const usable = height - topPad - 8;
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const v = Math.max(0, Math.min(1, wave[i] ?? 0));
+    const y = bottom - v * usable;
+    const x = i * step;
+    out.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
+  }
+  return out.join(' ');
+}
+
+export function PulseChart({ waveform, vector, width, height, timeLabels }: Props) {
   const path = useMemo(() => {
+    if (waveform && waveform.length > 1) {
+      return waveformToPath(waveform, width, height);
+    }
+    const v = vector?.length ? vector : [0.15];
     const pts = 48;
     const step = width / (pts - 1);
-    const base = [0.5, ...vector.slice(0, 6), 0.3];
+    const base = [0.12, ...v.slice(0, 6), 0.12];
     const out: string[] = [];
     for (let i = 0; i < pts; i++) {
       const t = i / (pts - 1);
-      const phase = Math.sin(t * Math.PI * 4) * 0.15;
-      const mix = Math.sin(t * Math.PI * 8) * 0.1;
-      const idx = (i % base.length) + Math.floor(i / 8) * 0.1;
-      const v = base[Math.floor(idx) % base.length] + phase + mix;
-      const y = height - 8 - v * (height - 24);
+      const idx = Math.floor((i / pts) * base.length) % base.length;
+      const val = Math.max(0.06, Math.min(1, base[idx]));
+      const y = height - 8 - val * (height - 24);
       const x = i * step;
       out.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
     }
     return out.join(' ');
-  }, [vector, width, height]);
+  }, [waveform, vector, width, height]);
 
   const fillPath = `${path} L ${width} ${height} L 0 ${height} Z`;
 

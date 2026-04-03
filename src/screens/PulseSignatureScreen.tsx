@@ -3,16 +3,18 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { PulseChart } from '../components/PulseChart';
 import { usePulse } from '../context/PulseContext';
-import { insightLines } from '../lib/pulse';
-import type { HomeStackParamList } from '../navigation/types';
+import { buildTasteSummary, insightLines } from '../lib/pulse';
+import type { LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'PulseSignature'>;
+type Props = NativeStackScreenProps<LogStackParamList, 'PulseSignature'>;
 
 export function PulseSignatureScreen({ navigation }: Props) {
-  const { pulseSignature, audioDurationSec } = usePulse();
+  const { pulseSignature, pulseWaveform, tasteSummary, audioDurationSec, persistActiveEventOutcome } =
+    usePulse();
   const { width } = useWindowDimensions();
-  const sig = pulseSignature ?? Array.from({ length: 12 }, () => 0.5);
+  const sig = pulseSignature;
+  const summary = tasteSummary ?? buildTasteSummary(sig);
   const insights = insightLines(sig);
   const total = audioDurationSec;
   const m = Math.floor(total / 60);
@@ -20,30 +22,70 @@ export function PulseSignatureScreen({ navigation }: Props) {
   const totalLabel = `${m}:${s.toString().padStart(2, '0')}`;
   const half = total / 2;
 
+  const goCrowd = () => {
+    persistActiveEventOutcome();
+    navigation.navigate('FriendMatch');
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <StatusBar style="light" />
       <Text style={[styles.title, font('bold')]}>Your pulse signature</Text>
 
-      <View style={styles.card}>
-        <PulseChart
-          vector={sig}
-          width={Math.min(width - 56, 360)}
-          height={140}
-          timeLabels={['0:00', `${Math.floor(half / 60)}:${Math.floor(half % 60).toString().padStart(2, '0')}`, totalLabel]}
-        />
-      </View>
+      <Pressable style={styles.backRow} onPress={() => navigation.goBack()}>
+        <Text style={[styles.backText, font('medium')]}>← Back to refine</Text>
+      </Pressable>
 
-      <Text style={[styles.insHead, font('semibold')]}>Insights</Text>
-      {insights.map((line) => (
-        <View key={line} style={styles.pill}>
+      {sig && sig.length > 0 ? (
+        <View style={styles.card}>
+          <Text style={[styles.chartCaption, font('regular')]}>
+            Your taps over the length of the set — quiet stretches mean you weren’t tapping there yet, or you’d
+            already stopped.
+          </Text>
+          <PulseChart
+            waveform={pulseWaveform ?? undefined}
+            vector={sig}
+            width={Math.min(width - 56, 360)}
+            height={140}
+            timeLabels={[
+              '0:00',
+              `${Math.floor(half / 60)}:${Math.floor(half % 60).toString().padStart(2, '0')}`,
+              totalLabel,
+            ]}
+          />
+        </View>
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={[styles.emptyTitle, font('semibold')]}>No pulse waveform</Text>
+          <Text style={[styles.emptySub, font('regular')]}>
+            You opted out before tapping or never pressed play. We will not invent a graph — continue to see how
+            matches and events adapt without a tap fingerprint.
+          </Text>
+        </View>
+      )}
+
+      <Text style={[styles.insHead, font('semibold')]}>How you listen</Text>
+      {summary.lines.map((line, i) => (
+        <View key={`${i}-${line.slice(0, 12)}`} style={styles.pill}>
           <View style={styles.dot} />
           <Text style={[styles.pillText, font('regular')]}>{line}</Text>
         </View>
       ))}
 
-      <Pressable style={styles.primary} onPress={() => navigation.navigate('FriendMatch')}>
-        <Text style={[styles.primaryText, font('bold')]}>Compare with crowd</Text>
+      {sig ? (
+        <>
+          <Text style={[styles.insHead, font('semibold')]}>Tap pattern notes</Text>
+          {insights.map((line) => (
+            <View key={line} style={styles.pill}>
+              <View style={[styles.dot, { backgroundColor: colors.cyan }]} />
+              <Text style={[styles.pillText, font('regular')]}>{line}</Text>
+            </View>
+          ))}
+        </>
+      ) : null}
+
+      <Pressable style={styles.primary} onPress={goCrowd}>
+        <Text style={[styles.primaryText, font('bold')]}>Find crowd matches</Text>
       </Pressable>
     </ScrollView>
   );
@@ -52,13 +94,26 @@ export function PulseSignatureScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingBottom: 40 },
-  title: { color: colors.text, fontSize: 22, marginBottom: 16, textAlign: 'center' },
+  title: { color: colors.text, fontSize: 22, marginBottom: 8, textAlign: 'center' },
+  backRow: { alignSelf: 'center', marginBottom: 14 },
+  backText: { color: colors.cyan, fontSize: 14 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
   },
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#2a3148',
+  },
+  emptyTitle: { color: colors.text, fontSize: 16, marginBottom: 8 },
+  emptySub: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  chartCaption: { color: colors.muted, fontSize: 12, marginBottom: 12, lineHeight: 17 },
   insHead: { color: colors.text, fontSize: 17, marginBottom: 10 },
   pill: {
     flexDirection: 'row',

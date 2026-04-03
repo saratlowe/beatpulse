@@ -2,10 +2,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePulse } from '../context/PulseContext';
-import type { HomeStackParamList } from '../navigation/types';
+import type { LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'RefineVibe'>;
+type Props = NativeStackScreenProps<LogStackParamList, 'RefineVibe'>;
 
 function TriState({
   label,
@@ -49,7 +49,7 @@ function TriState({
 }
 
 export function RefineVibeScreen({ navigation }: Props) {
-  const { refineAnswers, setRefineAnswers, refineComment, setRefineComment, commitPulseSignature } =
+  const { refineAnswers, setRefineAnswers, refineComment, setRefineComment, commitPulseSignature, tapTimestampsMs } =
     usePulse();
 
   const submit = () => {
@@ -74,8 +74,14 @@ export function RefineVibeScreen({ navigation }: Props) {
       <StatusBar style="light" />
       <Text style={[styles.title, font('bold')]}>Refine the vibe</Text>
       <Text style={[styles.sub, font('regular')]}>
-        Answer yes / no (or skip). This replaces sliders. Add an optional comment.
+        {tapTimestampsMs.length === 0
+          ? 'You skipped tapping — your pulse signature will stay empty until you engage with the set.'
+          : 'These answers layer on top of your taps. Skip anything you are unsure about.'}
       </Text>
+
+      <Pressable style={styles.backRow} onPress={() => navigation.goBack()}>
+        <Text style={[styles.backText, font('medium')]}>← Back to tapping</Text>
+      </Pressable>
 
       <TriState
         label="Does this set feel chaotic?"
@@ -116,7 +122,7 @@ export function RefineVibeScreen({ navigation }: Props) {
       </Pressable>
 
       <Pressable onPress={skipFlow}>
-        <Text style={[styles.opt, font('medium')]}>Opt out: use defaults &amp; skip comment</Text>
+        <Text style={[styles.opt, font('medium')]}>Use defaults &amp; skip comment</Text>
       </Pressable>
     </ScrollView>
   );
@@ -126,7 +132,9 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingBottom: 40 },
   title: { color: colors.text, fontSize: 22, marginBottom: 8, textAlign: 'center' },
-  sub: { color: colors.muted, fontSize: 13, marginBottom: 18, textAlign: 'center' },
+  sub: { color: colors.muted, fontSize: 13, marginBottom: 14, textAlign: 'center', lineHeight: 18 },
+  backRow: { alignSelf: 'center', marginBottom: 16 },
+  backText: { color: colors.cyan, fontSize: 14 },
   qBlock: { marginBottom: 20 },
   qTitle: { color: colors.text, fontSize: 15, marginBottom: 10, textAlign: 'center' },
   triRow: { alignItems: 'center' },

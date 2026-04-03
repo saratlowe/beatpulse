@@ -8,10 +8,17 @@ import React, {
   useState,
 } from 'react';
 import type { AudioSet } from '../lib/data';
-import { DEMO_AUDIO } from '../lib/data';
-import { buildPulseSignature, type RefineAnswers } from '../lib/pulse';
+import { FALLBACK_AUDIO } from '../lib/data';
+import {
+  buildPulseSignature,
+  buildPulseWaveform,
+  buildTasteSummary,
+  type RefineAnswers,
+  type TasteSummary,
+} from '../lib/pulse';
 
-const STORAGE_LOGGED = 'beatpulse_logged_events';
+const STORAGE_LOGGED = 'beatpulse_logged_events_v2';
+const STORAGE_LOGGED_LEGACY = 'beatpulse_logged_events';
 const STORAGE_REFINE = 'beatpulse_refine_defaults';
 
 export type LoggedEvent = {
@@ -19,14 +26,22 @@ export type LoggedEvent = {
   artist: string;
   venue: string;
   dateLabel: string;
+  audioUri: string;
+  audioTitle: string;
   createdAt: string;
+  /** Filled after completing pulse signature step */
+  pulseSignature: number[] | null;
+  /** Tap-aligned curve over track length */
+  pulseWaveform: number[] | null;
+  tasteSummary: TasteSummary | null;
 };
 
 type PulseContextValue = {
-  selectedAudio: AudioSet;
-  setSelectedAudio: (a: AudioSet) => void;
+  selectedAudio: AudioSet | null;
+  setSelectedAudio: (a: AudioSet | null) => void;
   tapTimestampsMs: number[];
   sessionStartMs: number | null;
+  sessionSeed: string;
   setSessionMeta: (startMs: number | null) => void;
   recordTap: (nowMs: number) => void;
   resetTaps: () => void;
@@ -37,10 +52,21 @@ type PulseContextValue = {
   refineComment: string;
   setRefineComment: (s: string) => void;
   pulseSignature: number[] | null;
+  pulseWaveform: number[] | null;
+  tasteSummary: TasteSummary | null;
   recomputePulse: () => void;
   commitPulseSignature: (answers: RefineAnswers, comment: string) => void;
   loggedEvents: LoggedEvent[];
-  addLoggedEvent: (e: Omit<LoggedEvent, 'id' | 'createdAt'>) => void;
+  activeEventId: string | null;
+  addLoggedEvent: (e: {
+    artist: string;
+    venue: string;
+    dateLabel: string;
+    audio: AudioSet;
+  }) => string;
+  beginReliveSession: (eventId: string) => void;
+  newSessionSeed: () => void;
+  persistActiveEventOutcome: () => void;
   clearSession: () => void;
 };
 
@@ -52,21 +78,77 @@ const defaultRefine: RefineAnswers = {
 
 const PulseContext = createContext<PulseContextValue | null>(null);
 
+function migrateLegacyEvent(raw: unknown): LoggedEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== 'string' || typeof o.artist !== 'string') return null;
+  const audioUri =
+    typeof o.audioUri === 'string' ? o.audioUri : FALLBACK_AUDIO.uri;
+  const audioTitle =
+    typeof o.audioTitle === 'string' ? o.audioTitle : FALLBACK_AUDIO.title;
+  let pulseSignature: number[] | null = null;
+  if (Array.isArray(o.pulseSignature) && o.pulseSignature.every((x) => typeof x === 'number')) {
+    pulseSignature = o.pulseSignature as number[];
+  }
+  let pulseWaveform: number[] | null = null;
+  if (Array.isArray(o.pulseWaveform) && o.pulseWaveform.every((x) => typeof x === 'number')) {
+    pulseWaveform = o.pulseWaveform as number[];
+  }
+  let tasteSummary: TasteSummary | null = null;
+  if (o.tasteSummary && typeof o.tasteSummary === 'object') {
+    const ts = o.tasteSummary as { lines?: unknown; tags?: unknown };
+    if (Array.isArray(ts.lines) && ts.lines.every((x) => typeof x === 'string')) {
+      tasteSummary = {
+        lines: ts.lines as string[],
+        tags: Array.isArray(ts.tags) && ts.tags.every((x) => typeof x === 'string')
+          ? (ts.tags as string[])
+          : [],
+      };
+    }
+  }
+  return {
+    id: o.id,
+    artist: o.artist,
+    venue: typeof o.venue === 'string' ? o.venue : '',
+    dateLabel: typeof o.dateLabel === 'string' ? o.dateLabel : '',
+    audioUri,
+    audioTitle,
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
+    pulseSignature,
+    pulseWaveform,
+    tasteSummary,
+  };
+}
+
 export function PulseProvider({ children }: { children: React.ReactNode }) {
-  const [selectedAudio, setSelectedAudio] = useState<AudioSet>(DEMO_AUDIO);
+  const [selectedAudio, setSelectedAudio] = useState<AudioSet | null>(null);
   const [tapTimestampsMs, setTapTimestamps] = useState<number[]>([]);
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
-  const [audioDurationSec, setAudioDurationSec] = useState(DEMO_AUDIO.durationSec);
+  const [sessionSeed, setSessionSeed] = useState(() => `s_${Date.now()}`);
+  const [audioDurationSec, setAudioDurationSec] = useState(FALLBACK_AUDIO.durationSec);
   const [refineAnswers, setRefineAnswers] = useState<RefineAnswers>(defaultRefine);
   const [refineComment, setRefineComment] = useState('');
   const [pulseSignature, setPulseSignature] = useState<number[] | null>(null);
+  const [pulseWaveform, setPulseWaveform] = useState<number[] | null>(null);
+  const [tasteSummary, setTasteSummary] = useState<TasteSummary | null>(null);
   const [loggedEvents, setLoggedEvents] = useState<LoggedEvent[]>([]);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_LOGGED);
-        if (raw) setLoggedEvents(JSON.parse(raw));
+        let raw = await AsyncStorage.getItem(STORAGE_LOGGED);
+        if (!raw) raw = await AsyncStorage.getItem(STORAGE_LOGGED_LEGACY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as unknown[];
+          const rows = parsed
+            .map((x) => migrateLegacyEvent(x))
+            .filter((x): x is LoggedEvent => x !== null);
+          setLoggedEvents(rows);
+          if (rows.length) {
+            AsyncStorage.setItem(STORAGE_LOGGED, JSON.stringify(rows)).catch(() => {});
+          }
+        }
         const r = await AsyncStorage.getItem(STORAGE_REFINE);
         if (r) setRefineAnswers(JSON.parse(r));
       } catch {
@@ -91,6 +173,8 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
     setTapTimestamps([]);
     setSessionStartMs(null);
     setPulseSignature(null);
+    setPulseWaveform(null);
+    setTasteSummary(null);
   }, []);
 
   const recomputePulse = useCallback(() => {
@@ -102,7 +186,10 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       refineAnswers,
       refineComment
     );
+    const wf = buildPulseWaveform(tapTimestampsMs, start, audioDurationSec);
     setPulseSignature(sig);
+    setPulseWaveform(wf);
+    setTasteSummary(buildTasteSummary(sig));
   }, [tapTimestampsMs, sessionStartMs, audioDurationSec, refineAnswers, refineComment]);
 
   const commitPulseSignature = useCallback(
@@ -117,23 +204,91 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
         answers,
         comment
       );
+      const wf = buildPulseWaveform(tapTimestampsMs, start, audioDurationSec);
       setPulseSignature(sig);
+      setPulseWaveform(wf);
+      setTasteSummary(buildTasteSummary(sig));
     },
     [tapTimestampsMs, sessionStartMs, audioDurationSec]
   );
 
-  const addLoggedEvent = useCallback((e: Omit<LoggedEvent, 'id' | 'createdAt'>) => {
-    const row: LoggedEvent = {
-      ...e,
-      id: `le_${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
+  const persistLogged = useCallback((next: LoggedEvent[]) => {
+    AsyncStorage.setItem(STORAGE_LOGGED, JSON.stringify(next)).catch(() => {});
+  }, []);
+
+  const addLoggedEvent = useCallback(
+    (e: { artist: string; venue: string; dateLabel: string; audio: AudioSet }) => {
+      const id = `le_${Date.now()}`;
+      const row: LoggedEvent = {
+        id,
+        artist: e.artist.trim(),
+        venue: e.venue.trim(),
+        dateLabel: e.dateLabel.trim(),
+        audioUri: e.audio.uri,
+        audioTitle: e.audio.title,
+        createdAt: new Date().toISOString(),
+        pulseSignature: null,
+        pulseWaveform: null,
+        tasteSummary: null,
+      };
+      setLoggedEvents((prev) => {
+        const next = [row, ...prev];
+        persistLogged(next);
+        return next;
+      });
+      setSelectedAudio(e.audio);
+      setActiveEventId(id);
+      setSessionSeed(`s_${Date.now()}_${id}`);
+      setAudioDurationSec(e.audio.durationSec);
+      resetTaps();
+      setRefineAnswers(defaultRefine);
+      setRefineComment('');
+      return id;
+    },
+    [persistLogged, resetTaps]
+  );
+
+  const beginReliveSession = useCallback(
+    (eventId: string) => {
+      const ev = loggedEvents.find((x) => x.id === eventId);
+      if (!ev) return;
+      setActiveEventId(eventId);
+      setSelectedAudio({
+        id: `relive_${eventId}`,
+        title: ev.audioTitle,
+        artist: ev.artist,
+        uri: ev.audioUri,
+        durationSec: FALLBACK_AUDIO.durationSec,
+      });
+      setSessionSeed(`s_${Date.now()}_${eventId}`);
+      resetTaps();
+      setRefineAnswers({ ...defaultRefine });
+      setRefineComment('');
+    },
+    [loggedEvents, resetTaps]
+  );
+
+  const newSessionSeed = useCallback(() => {
+    setSessionSeed(`s_${Date.now()}`);
+  }, []);
+
+  const persistActiveEventOutcome = useCallback(() => {
+    if (!activeEventId) return;
     setLoggedEvents((prev) => {
-      const next = [row, ...prev];
-      AsyncStorage.setItem(STORAGE_LOGGED, JSON.stringify(next)).catch(() => {});
+      const next = prev.map((row) =>
+        row.id === activeEventId
+          ? {
+              ...row,
+              pulseSignature,
+              pulseWaveform,
+              tasteSummary,
+            }
+          : row
+      );
+      persistLogged(next);
       return next;
     });
-  }, []);
+  }, [activeEventId, pulseSignature, pulseWaveform, tasteSummary, persistLogged]);
 
   const clearSession = useCallback(() => {
     setTapTimestamps([]);
@@ -141,6 +296,10 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
     setRefineAnswers(defaultRefine);
     setRefineComment('');
     setPulseSignature(null);
+    setPulseWaveform(null);
+    setTasteSummary(null);
+    setSelectedAudio(null);
+    setActiveEventId(null);
   }, []);
 
   const value = useMemo(
@@ -149,6 +308,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       setSelectedAudio,
       tapTimestampsMs,
       sessionStartMs,
+      sessionSeed,
       setSessionMeta,
       recordTap,
       resetTaps,
@@ -159,16 +319,23 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       refineComment,
       setRefineComment,
       pulseSignature,
+      pulseWaveform,
+      tasteSummary,
       recomputePulse,
       commitPulseSignature,
       loggedEvents,
+      activeEventId,
       addLoggedEvent,
+      beginReliveSession,
+      newSessionSeed,
+      persistActiveEventOutcome,
       clearSession,
     }),
     [
       selectedAudio,
       tapTimestampsMs,
       sessionStartMs,
+      sessionSeed,
       setSessionMeta,
       recordTap,
       resetTaps,
@@ -176,10 +343,16 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       refineAnswers,
       refineComment,
       pulseSignature,
+      pulseWaveform,
+      tasteSummary,
       recomputePulse,
       commitPulseSignature,
       loggedEvents,
+      activeEventId,
       addLoggedEvent,
+      beginReliveSession,
+      newSessionSeed,
+      persistActiveEventOutcome,
       clearSession,
     ]
   );

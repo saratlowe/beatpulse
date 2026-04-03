@@ -1,8 +1,12 @@
-import * as Haptics from 'expo-haptics';
+import { MaterialIcons } from '@expo/vector-icons';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { CompositeNavigationProp } from '@react-navigation/native';
+import { useRoute } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Haptics from 'expo-haptics';
 import { Audio, AVPlaybackStatusSuccess } from 'expo-av';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Animated,
   Platform,
@@ -18,10 +22,14 @@ import {
   decayTowardBaseline,
   DECAY_MS,
 } from '../lib/tapLive';
-import type { HomeStackParamList } from '../navigation/types';
+import type { LogStackParamList, RootTabParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'TapSession'>;
+type Props = NativeStackScreenProps<LogStackParamList, 'TapSession'>;
+type Nav = CompositeNavigationProp<
+  Props['navigation'],
+  BottomTabNavigationProp<RootTabParamList>
+>;
 
 function formatTime(sec: number) {
   const m = Math.floor(sec / 60);
@@ -32,6 +40,8 @@ function formatTime(sec: number) {
 const SPARK_MAX = 18;
 
 export function TapSessionScreen({ navigation }: Props) {
+  const route = useRoute<Props['route']>();
+  const mode = route.params?.mode;
   const {
     selectedAudio,
     recordTap,
@@ -44,15 +54,36 @@ export function TapSessionScreen({ navigation }: Props) {
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const [positionSec, setPositionSec] = useState(0);
-  const [durationSec, setDurationSec] = useState(selectedAudio.durationSec);
+  const [durationSec, setDurationSec] = useState(selectedAudio?.durationSec ?? 300);
   const [playing, setPlaying] = useState(false);
   const [energy, setEnergy] = useState(BASELINE);
   const [intensity, setIntensity] = useState(BASELINE);
   const [loadError, setLoadError] = useState<string | null>(null);
   const lastTapAtRef = useRef(0);
   const [sparkTrail, setSparkTrail] = useState<number[]>([]);
-
   const scale = useRef(new Animated.Value(1)).current;
+  const tabNav = navigation as unknown as Nav;
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable
+          onPress={() => {
+            if (mode === 'relive') {
+              navigation.popToTop();
+              tabNav.navigate('Home');
+            } else {
+              navigation.navigate('LogEventMain');
+            }
+          }}
+          style={styles.headerBtn}
+          hitSlop={12}
+        >
+          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, mode, tabNav]);
 
   const unload = useCallback(async () => {
     const s = soundRef.current;
@@ -61,7 +92,9 @@ export function TapSessionScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!selectedAudio) return;
     let cancelled = false;
+    setLoadError(null);
     (async () => {
       try {
         await Audio.setAudioModeAsync({
@@ -103,9 +136,8 @@ export function TapSessionScreen({ navigation }: Props) {
       cancelled = true;
       unload();
     };
-  }, [selectedAudio.uri, setAudioDurationSec, unload]);
+  }, [selectedAudio?.uri, setAudioDurationSec, unload, selectedAudio]);
 
-  /** Recompute meters when tap list grows */
   useEffect(() => {
     if (tapTimestampsMs.length === 0) {
       setEnergy(BASELINE);
@@ -121,7 +153,6 @@ export function TapSessionScreen({ navigation }: Props) {
     setSparkTrail((prev) => [...prev, m.intensity].slice(-SPARK_MAX));
   }, [tapTimestampsMs]);
 
-  /** Decay toward baseline when user pauses */
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now();
@@ -185,13 +216,35 @@ export function TapSessionScreen({ navigation }: Props) {
   };
 
   const finish = async () => {
-    await unload();
+    const s = soundRef.current;
+    if (s) {
+      const st = await s.getStatusAsync();
+      if (st.isLoaded && st.isPlaying) await s.pauseAsync();
+    }
     navigation.navigate('RefineVibe');
   };
+
+  if (!selectedAudio) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" />
+        <Text style={[styles.warnTitle, font('bold')]}>No audio selected</Text>
+        <Text style={[styles.warnSub, font('regular')]}>
+          Go back to Log event and attach a set URL or run a search before reliving.
+        </Text>
+        <Pressable style={styles.playBtn} onPress={() => navigation.navigate('LogEventMain')}>
+          <Text style={[styles.playText, font('semibold')]}>Back to log</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
+      <Text style={[styles.setLabel, font('medium')]} numberOfLines={2}>
+        {selectedAudio.title}
+      </Text>
       <Text style={[styles.timer, font('medium')]}>
         {formatTime(positionSec)} / {formatTime(durationSec)}
       </Text>
@@ -219,11 +272,7 @@ export function TapSessionScreen({ navigation }: Props) {
               { transform: [{ scale }], opacity: canTap ? 1 : 0.42 },
             ]}
           >
-            <Pressable
-              style={styles.tapPress}
-              onPress={onTap}
-              disabled={!canTap}
-            >
+            <Pressable style={styles.tapPress} onPress={onTap} disabled={!canTap}>
               <View style={styles.tapInner}>
                 <Text style={[styles.tapText, font('semibold')]}>Tap how it feels</Text>
                 <Text style={[styles.tapSub, font('regular')]}>
@@ -274,7 +323,7 @@ export function TapSessionScreen({ navigation }: Props) {
       </Pressable>
 
       <Pressable style={styles.finish} onPress={finish}>
-        <Text style={[styles.finishText, font('bold')]}>Finish reflection</Text>
+        <Text style={[styles.finishText, font('bold')]}>Continue to refine</Text>
       </Pressable>
 
       <Pressable onPress={skipAll}>
@@ -285,12 +334,20 @@ export function TapSessionScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  headerBtn: { paddingHorizontal: 8, paddingVertical: 4 },
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingHorizontal: 20,
     paddingBottom: 28,
+  },
+  setLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 8,
   },
   timer: {
     alignSelf: 'center',
@@ -299,6 +356,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   err: { color: colors.accent, textAlign: 'center', marginBottom: 8 },
+  warnTitle: { color: colors.text, fontSize: 20, textAlign: 'center', marginTop: 40 },
+  warnSub: { color: colors.muted, fontSize: 14, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
   mainRow: {
     flexDirection: 'row',
     alignItems: 'center',
