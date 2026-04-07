@@ -27,18 +27,6 @@ export function audioFromLocalFile(uri: string, title: string, durationSec = 300
   };
 }
 
-export function audioFromPastedUrl(uri: string, label?: string): AudioSet | null {
-  const u = uri.trim();
-  if (!/^https?:\/\//i.test(u)) return null;
-  return {
-    id: `paste_${Date.now()}`,
-    title: label?.trim() || 'Your linked set',
-    artist: 'Custom URL',
-    uri: u,
-    durationSec: 300,
-  };
-}
-
 /** SoundHelix royalty-free demos — rotated as stand-in audio for MVP (not the original masters). */
 const HELIX_URI = (n: number) =>
   `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${((n - 1) % 12) + 1}.mp3`;

@@ -230,7 +230,7 @@ export function TapSessionScreen({ navigation }: Props) {
         <StatusBar style="light" />
         <Text style={[styles.warnTitle, font('bold')]}>No audio selected</Text>
         <Text style={[styles.warnSub, font('regular')]}>
-          Go back to Log event and attach a set URL or run a search before reliving.
+          Go back to Log event and attach demo audio or a file before reliving.
         </Text>
         <Pressable style={styles.playBtn} onPress={() => navigation.navigate('LogEventMain')}>
           <Text style={[styles.playText, font('semibold')]}>Back to log</Text>

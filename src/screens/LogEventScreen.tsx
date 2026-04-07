@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { LocalMp3Picker } from '../components/LocalMp3Picker';
 import { usePulse } from '../context/PulseContext';
-import { audioFromPastedUrl, searchEdmDemoTracks, type AudioSet } from '../lib/data';
+import { searchEdmDemoTracks, type AudioSet } from '../lib/data';
 import type { LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
@@ -23,8 +23,6 @@ export function LogEventScreen({ navigation }: Props) {
   const [artist, setArtist] = useState('');
   const [venue, setVenue] = useState('');
   const [dateLabel, setDateLabel] = useState('');
-  const [pasteUrl, setPasteUrl] = useState('');
-  const [pasteTitle, setPasteTitle] = useState('');
   const [demoQuery, setDemoQuery] = useState('');
   const [picked, setPicked] = useState<AudioSet | null>(null);
   const blobRef = useRef<string | null>(null);
@@ -52,11 +50,6 @@ export function LogEventScreen({ navigation }: Props) {
     setSelectedAudio(a);
   };
 
-  const applyPaste = () => {
-    const a = audioFromPastedUrl(pasteUrl, pasteTitle || undefined);
-    if (a) pickAudio(a);
-  };
-
   const canSubmit =
     artist.trim().length > 0 &&
     venue.trim().length > 0 &&
@@ -79,8 +72,8 @@ export function LogEventScreen({ navigation }: Props) {
       <StatusBar style="light" />
       <Text style={[styles.title, font('bold')]}>Log your night</Text>
       <Text style={[styles.sub, font('regular')]}>
-        Add the artist, where you were, and when. Pick audio from the EDM demo search, drop in your own MP3, or
-        paste a stream URL.
+        Add the artist, where you were, and when. Pick audio from the EDM demo search or your own MP3 / audio
+        file.
       </Text>
 
       <Text style={[styles.label, font('semibold')]}>Artist</Text>
@@ -112,9 +105,8 @@ export function LogEventScreen({ navigation }: Props) {
 
       <Text style={[styles.section, font('semibold')]}>Set audio</Text>
       <Text style={[styles.hint, font('regular')]}>
-        Demo search lists well-known EDM hits for MVP discoverability; streams are royalty-free SoundHelix
-        stand-ins, not the original masters. Your own files and URLs play as-is. On web, blob URLs reset after
-        refresh.
+        Demo search lists well-known EDM hits for MVP discoverability; playback uses royalty-free SoundHelix
+        stand-ins, not the original masters. Your own files play as-is. On web, blob URLs reset after refresh.
       </Text>
 
       <Text style={[styles.subSection, font('semibold')]}>Search EDM demos</Text>
@@ -156,26 +148,6 @@ export function LogEventScreen({ navigation }: Props) {
 
       <Text style={[styles.subSection, font('semibold')]}>Your MP3 / audio file</Text>
       <LocalMp3Picker onPick={pickAudio} />
-
-      <Text style={[styles.subSection, font('semibold')]}>Or stream URL (optional)</Text>
-      <TextInput
-        value={pasteUrl}
-        onChangeText={setPasteUrl}
-        placeholder="https://…mp3 or stream"
-        placeholderTextColor={colors.muted}
-        autoCapitalize="none"
-        style={[styles.input, font('regular')]}
-      />
-      <TextInput
-        value={pasteTitle}
-        onChangeText={setPasteTitle}
-        placeholder="Optional label for this link"
-        placeholderTextColor={colors.muted}
-        style={[styles.input, font('regular'), { marginTop: 8 }]}
-      />
-      <Pressable style={styles.secondary} onPress={applyPaste}>
-        <Text style={[styles.secondaryText, font('semibold')]}>Use this URL</Text>
-      </Pressable>
 
       {picked ? (
         <View style={styles.picked}>
@@ -239,16 +211,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
-  secondary: {
-    alignSelf: 'flex-start',
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: colors.cyan,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  secondaryText: { color: colors.cyan, fontSize: 14 },
   picked: {
     flexDirection: 'row',
     alignItems: 'center',
