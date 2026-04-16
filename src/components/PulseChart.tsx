@@ -11,47 +11,52 @@ type Props = {
   width: number;
   height: number;
   timeLabels?: string[];
+  /** Horizontal inset so the stroke stays inside the card (px). */
+  horizontalInset?: number;
 };
 
-function waveformToPath(wave: number[], width: number, height: number): string {
+function waveformToPath(wave: number[], width: number, height: number, insetX: number): string {
   const n = wave.length;
   if (n < 2) return '';
-  const step = width / (n - 1);
-  const bottom = height - 4;
-  const topPad = 10;
-  const usable = height - topPad - 8;
+  const innerW = Math.max(4, width - 2 * insetX);
+  const step = innerW / (n - 1);
+  const bottom = height - 6;
+  const topPad = 12;
+  const usable = height - topPad - 10;
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const v = Math.max(0, Math.min(1, wave[i] ?? 0));
     const y = bottom - v * usable;
-    const x = i * step;
+    const x = insetX + i * step;
     out.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
   }
   return out.join(' ');
 }
 
-export function PulseChart({ waveform, vector, width, height, timeLabels }: Props) {
+export function PulseChart({ waveform, vector, width, height, timeLabels, horizontalInset = 14 }: Props) {
+  const inset = horizontalInset;
   const path = useMemo(() => {
     if (waveform && waveform.length > 1) {
-      return waveformToPath(waveform, width, height);
+      return waveformToPath(waveform, width, height, inset);
     }
     const v = vector?.length ? vector : [0.15];
     const pts = 48;
-    const step = width / (pts - 1);
+    const innerW = Math.max(4, width - 2 * inset);
+    const step = innerW / (pts - 1);
     const base = [0.12, ...v.slice(0, 6), 0.12];
     const out: string[] = [];
     for (let i = 0; i < pts; i++) {
       const t = i / (pts - 1);
       const idx = Math.floor((i / pts) * base.length) % base.length;
       const val = Math.max(0.06, Math.min(1, base[idx]));
-      const y = height - 8 - val * (height - 24);
-      const x = i * step;
+      const y = height - 10 - val * (height - 28);
+      const x = inset + i * step;
       out.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
     }
     return out.join(' ');
-  }, [waveform, vector, width, height]);
+  }, [waveform, vector, width, height, inset]);
 
-  const fillPath = `${path} L ${width} ${height} L 0 ${height} Z`;
+  const fillPath = `${path} L ${width - inset} ${height} L ${inset} ${height} Z`;
 
   return (
     <View>

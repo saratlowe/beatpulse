@@ -7,7 +7,7 @@ import { usePulse, type LoggedEvent } from '../context/PulseContext';
 import { THEMED_EVENTS } from '../lib/data';
 import { crowdMatchScore, rankFakeFriends } from '../lib/crowdMatch';
 import { rankThemedEventsForUser } from '../lib/eventRec';
-import type { TasteSummary } from '../lib/pulse';
+import { buildAggregateProfilePulse, buildAggregateTasteSummary } from '../lib/pulse';
 import type { DiscoverStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
@@ -15,23 +15,20 @@ type Props = NativeStackScreenProps<DiscoverStackParamList, 'DiscoverMain'>;
 
 type DiscoverSegment = 'friends' | 'events';
 
-/** Pulse + taste from saved Home shows only — not the in-progress Log tab session */
-function useSavedProfileSummary(loggedEvents: LoggedEvent[]) {
+/** Cross-night median pulse + aggregate taste — same basis as Profile (not one mashed waveform). */
+function useAggregateProfileFromLogs(loggedEvents: LoggedEvent[]) {
   return useMemo(() => {
     const completed = loggedEvents.filter((e) => e.pulseSignature && e.pulseSignature.length > 0);
     if (completed.length === 0) {
       return {
         pulse: null as number[] | null,
-        taste: null as TasteSummary | null,
+        taste: buildAggregateTasteSummary([]),
         hasSavedShows: false,
       };
     }
-    const latest = [...completed].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-    return {
-      pulse: latest.pulseSignature,
-      taste: latest.tasteSummary,
-      hasSavedShows: true,
-    };
+    const pulse = buildAggregateProfilePulse(completed.map((e) => e.pulseSignature));
+    const taste = buildAggregateTasteSummary(completed);
+    return { pulse, taste, hasSavedShows: true };
   }, [loggedEvents]);
 }
 
@@ -39,7 +36,7 @@ export function DiscoverScreen({ navigation }: Props) {
   const { loggedEvents } = usePulse();
   const [segment, setSegment] = useState<DiscoverSegment>('friends');
 
-  const { pulse: profilePulse, taste: profileTaste, hasSavedShows } = useSavedProfileSummary(loggedEvents);
+  const { pulse: profilePulse, taste: profileTaste, hasSavedShows } = useAggregateProfileFromLogs(loggedEvents);
 
   const rankedFriends = useMemo(() => rankFakeFriends(profilePulse), [profilePulse]);
 
@@ -53,8 +50,8 @@ export function DiscoverScreen({ navigation }: Props) {
       <StatusBar style="light" />
       <Text style={[styles.title, font('bold')]}>Discover</Text>
       <Text style={[styles.sub, font('regular')]}>
-        Picks here use your saved shows on Home — not the event you&apos;re logging in the Log tab. That flow
-        has its own crowd match and event list at the end.
+        Friend and event picks use your overall pattern across saved nights on Home (median pulse per dimension —
+        not one blended curve). The Log tab flow still has its own per-set crowd step at the end.
       </Text>
 
       <View style={styles.segmentRow}>
@@ -81,12 +78,12 @@ export function DiscoverScreen({ navigation }: Props) {
           <Text style={[styles.section, font('semibold')]}>Crowd you might vibe with</Text>
           {!hasSavedShows ? (
             <Text style={[styles.muted, font('regular')]}>
-              Finish logging a show on the Log tab and tap Done so it appears on Home — then we can rank demo
-              friends against your saved pulse. You can still open profiles at 0% to preview shapes.
+              Finish logging a show on the Log tab and save a pulse to Home — then we rank demo friends against
+              your typical pattern across all saved nights.
             </Text>
           ) : (
             <View style={styles.hero}>
-              <Text style={[styles.heroLabel, font('medium')]}>Your pulse (from latest saved show)</Text>
+              <Text style={[styles.heroLabel, font('medium')]}>Your typical pulse (all saved sets)</Text>
               {profilePulse && profilePulse.length > 0 ? (
                 <MiniPulseBars vector={profilePulse} barCount={28} />
               ) : (
@@ -117,7 +114,7 @@ export function DiscoverScreen({ navigation }: Props) {
         <>
           <Text style={[styles.section, font('semibold')]}>Events · taste fit</Text>
           <Text style={[styles.hint, font('regular')]}>
-            Scores reflect your saved profile on Home (pulse + refine tags), not tonight&apos;s draft session.
+            Scores reflect your aggregate taste across saved nights on Home, not tonight&apos;s draft log session.
           </Text>
           {!hasSavedShows ? (
             <Text style={[styles.muted, font('regular')]}>

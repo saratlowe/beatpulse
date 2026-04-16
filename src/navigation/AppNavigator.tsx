@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Platform } from 'react-native';
 import { DiscoverScreen } from '../screens/DiscoverScreen';
 import { FriendPulseDetailScreen } from '../screens/FriendPulseDetailScreen';
 import { EventRecommendationsScreen } from '../screens/EventRecommendationsScreen';
@@ -40,9 +41,15 @@ const navTheme = {
 };
 
 const stackScreenOpts = {
-  headerStyle: { backgroundColor: colors.bg },
+  headerStyle: {
+    backgroundColor: colors.bg,
+    minHeight: Platform.OS === 'android' ? 56 : Platform.OS === 'ios' ? 52 : 52,
+  },
+  headerTitleContainerStyle: {
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
+  },
   headerTintColor: colors.text,
-  headerTitleStyle: { fontWeight: '600' as const },
+  headerTitleStyle: { fontWeight: '600' as const, fontSize: 17 },
   headerShadowVisible: false,
   contentStyle: { backgroundColor: colors.bg },
 };

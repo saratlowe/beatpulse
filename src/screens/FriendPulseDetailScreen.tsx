@@ -7,6 +7,7 @@ import { MiniPulseBars } from '../components/MiniPulseBars';
 import { PulseChart } from '../components/PulseChart';
 import { usePulse } from '../context/PulseContext';
 import { explainFriendMatch, getFakeFriend } from '../lib/fakeFriends';
+import { buildAggregateProfilePulse } from '../lib/pulse';
 import type { DiscoverStackParamList, LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
@@ -51,15 +52,24 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
   const friend = getFakeFriend(friendId);
   const { pulseSignature, pulseWaveform, loggedEvents } = usePulse();
 
-  const latestSaved = useMemo(() => {
-    const done = loggedEvents.filter((e) => e.pulseSignature && e.pulseSignature.length > 0);
-    if (!done.length) return null;
-    return [...done].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  }, [loggedEvents]);
+  const completedSaved = useMemo(
+    () => loggedEvents.filter((e) => e.pulseSignature && e.pulseSignature.length > 0),
+    [loggedEvents]
+  );
 
-  /** Discover compares against saved Home profile; Log flow uses the active session */
-  const viewerSig = fromLogFlow ? pulseSignature : (latestSaved?.pulseSignature ?? pulseSignature);
-  const viewerWave = fromLogFlow ? pulseWaveform : (latestSaved?.pulseWaveform ?? pulseWaveform);
+  const latestSaved = useMemo(() => {
+    if (!completedSaved.length) return null;
+    return [...completedSaved].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  }, [completedSaved]);
+
+  const aggregateSig = useMemo(
+    () => buildAggregateProfilePulse(completedSaved.map((e) => e.pulseSignature)),
+    [completedSaved]
+  );
+
+  /** Discover: typical pulse across all saved nights. Log flow: this session only. */
+  const viewerSig = fromLogFlow ? pulseSignature : aggregateSig ?? latestSaved?.pulseSignature ?? pulseSignature;
+  const viewerWave = fromLogFlow ? pulseWaveform : latestSaved?.pulseWaveform ?? pulseWaveform;
 
   const { width } = useWindowDimensions();
   const chartW = Math.min(width - 40, 360);
@@ -92,11 +102,11 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
       <Text style={[styles.caption, font('regular')]}>
         {fromLogFlow
           ? 'Where you tapped along the track — flat stretches mean no taps there.'
-          : 'From your most recent saved show on Home — flat stretches mean no taps there.'}
+          : 'Waveform from your most recent saved show; energy bars use your typical pulse across all saved nights.'}
       </Text>
       <View style={styles.card}>
         {viewerWave && viewerWave.length > 1 ? (
-          <PulseChart waveform={viewerWave} width={chartW} height={120} />
+          <PulseChart waveform={viewerWave} width={chartW} height={120} horizontalInset={14} />
         ) : (
           <Text style={[styles.muted, font('regular')]}>
             {fromLogFlow
@@ -109,7 +119,7 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
       <Text style={[styles.section, font('semibold')]}>{friend.name.split(' ')[0]}&apos;s waveform</Text>
       <Text style={[styles.caption, font('regular')]}>Demo shape for this profile.</Text>
       <View style={styles.card}>
-        <PulseChart waveform={friend.waveform} width={chartW} height={120} />
+        <PulseChart waveform={friend.waveform} width={chartW} height={120} horizontalInset={14} />
       </View>
 
       <Text style={[styles.section, font('semibold')]}>Side-by-side energy bars</Text>

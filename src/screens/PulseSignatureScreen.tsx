@@ -11,8 +11,13 @@ import { colors, font } from '../theme';
 
 type Props = NativeStackScreenProps<LogStackParamList, 'PulseSignature'>;
 
+function waveformHasEngagement(w: number[] | null | undefined, threshold = 0.02): boolean {
+  if (!w || w.length < 2) return false;
+  return w.some((v) => v > threshold);
+}
+
 export function PulseSignatureScreen({ navigation }: Props) {
-  const { pulseSignature, pulseWaveform, audioDurationSec, persistActiveEventOutcome } = usePulse();
+  const { pulseSignature, pulseWaveform, audioDurationSec, persistActiveEventOutcome, tasteSummary } = usePulse();
   const { width } = useWindowDimensions();
   const sig = pulseSignature;
 
@@ -24,7 +29,11 @@ export function PulseSignatureScreen({ navigation }: Props) {
     }, [])
   );
 
-  const tasteLines = recapTasteLines(sig, recapSeed);
+  const hasWaveform = waveformHasEngagement(pulseWaveform);
+  const tasteLines =
+    tasteSummary && tasteSummary.lines.length > 0
+      ? tasteSummary.lines
+      : recapTasteLines(sig, recapSeed);
   const insights = recapInsightLines(sig, recapSeed);
   const total = audioDurationSec;
   const m = Math.floor(total / 60);
@@ -46,7 +55,7 @@ export function PulseSignatureScreen({ navigation }: Props) {
         <Text style={[styles.backText, font('medium')]}>← Back to refine</Text>
       </Pressable>
 
-      {sig && sig.length > 0 ? (
+      {hasWaveform ? (
         <View style={styles.card}>
           <Text style={[styles.chartCaption, font('regular')]}>
             Your taps over the length of the set — quiet stretches mean you weren’t tapping there yet, or you’d
@@ -54,15 +63,23 @@ export function PulseSignatureScreen({ navigation }: Props) {
           </Text>
           <PulseChart
             waveform={pulseWaveform ?? undefined}
-            vector={sig}
             width={Math.min(width - 56, 360)}
             height={140}
+            horizontalInset={16}
             timeLabels={[
               '0:00',
               `${Math.floor(half / 60)}:${Math.floor(half % 60).toString().padStart(2, '0')}`,
               totalLabel,
             ]}
           />
+        </View>
+      ) : sig && sig.length > 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={[styles.emptyTitle, font('semibold')]}>No tap curve for this session</Text>
+          <Text style={[styles.emptySub, font('regular')]}>
+            We only draw the time graph when there are taps along the track. Your summary below still reflects
+            refine answers where we could infer a pulse.
+          </Text>
         </View>
       ) : (
         <View style={styles.emptyCard}>

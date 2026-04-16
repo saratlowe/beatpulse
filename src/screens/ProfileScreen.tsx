@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MiniPulseBars } from '../components/MiniPulseBars';
 import { usePulse } from '../context/PulseContext';
-import { buildTasteSummary } from '../lib/pulse';
+import { buildAggregateProfilePulse, buildAggregateTasteSummary, buildTasteSummary } from '../lib/pulse';
 import type { ProfileStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
@@ -13,17 +13,24 @@ export function ProfileScreen({}: Props) {
   const { pulseSignature, tasteSummary, loggedEvents, clearSession } = usePulse();
 
   const completed = loggedEvents.filter((e) => e.pulseSignature && e.pulseSignature.length > 0);
-  const aggregateTags = new Map<string, number>();
-  for (const e of completed) {
-    const tags = e.tasteSummary?.tags ?? buildTasteSummary(e.pulseSignature).tags;
-    for (const t of tags) {
-      aggregateTags.set(t, (aggregateTags.get(t) ?? 0) + 1);
-    }
-  }
-  const topTags = Array.from(aggregateTags.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([t]) => t);
+  const aggregatePulse = buildAggregateProfilePulse(completed.map((e) => e.pulseSignature));
+  const aggregateTaste = buildAggregateTasteSummary(completed);
+  const topTags =
+    aggregateTaste.tags.length > 0
+      ? aggregateTaste.tags.slice(0, 10)
+      : (() => {
+          const aggregateTags = new Map<string, number>();
+          for (const e of completed) {
+            const tags = e.tasteSummary?.tags ?? buildTasteSummary(e.pulseSignature).tags;
+            for (const t of tags) {
+              aggregateTags.set(t, (aggregateTags.get(t) ?? 0) + 1);
+            }
+          }
+          return Array.from(aggregateTags.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([t]) => t);
+        })();
 
   const liveSummary = tasteSummary ?? buildTasteSummary(pulseSignature);
 
@@ -32,13 +39,37 @@ export function ProfileScreen({}: Props) {
       <StatusBar style="light" />
       <Text style={[styles.title, font('bold')]}>Profile</Text>
       <Text style={[styles.sub, font('regular')]}>
-        A rolling read on how you listen, pulled from nights you have finished with a pulse.
+        Overall listening pattern from every night you saved with a pulse — updated whenever you log a new set.
       </Text>
 
       <View style={styles.card}>
-        <Text style={[styles.cardTitle, font('semibold')]}>Latest session summary</Text>
-        {liveSummary.lines.map((line, i) => (
-          <Text key={`l-${i}`} style={[styles.line, font('regular')]}>
+        <Text style={[styles.cardTitle, font('semibold')]}>Overall pattern summary</Text>
+        {aggregateTaste.lines.map((line, i) => (
+          <Text key={`agg-${i}`} style={[styles.line, font('regular')]}>
+            · {line}
+          </Text>
+        ))}
+      </View>
+
+      {aggregatePulse && aggregatePulse.length > 0 ? (
+        <View style={styles.card}>
+          <Text style={[styles.cardTitle, font('semibold')]}>Typical pulse (median across nights)</Text>
+          <MiniPulseBars vector={aggregatePulse} barCount={36} />
+          <Text style={[styles.mono, font('regular')]}>
+            {aggregatePulse.map((n) => n.toFixed(2)).join(' · ')}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={[styles.cardTitle, font('semibold')]}>Typical pulse (median across nights)</Text>
+          <Text style={[styles.muted, font('regular')]}>Complete at least one saved set with taps to see this.</Text>
+        </View>
+      )}
+
+      <View style={styles.card}>
+        <Text style={[styles.cardTitle, font('semibold')]}>Current log session (in memory)</Text>
+        {liveSummary.lines.slice(0, 5).map((line, i) => (
+          <Text key={`live-${i}`} style={[styles.line, font('regular')]}>
             · {line}
           </Text>
         ))}
@@ -52,15 +83,10 @@ export function ProfileScreen({}: Props) {
             {pulseSignature.map((n) => n.toFixed(2)).join(' · ')}
           </Text>
         </View>
-      ) : (
-        <View style={styles.card}>
-          <Text style={[styles.cardTitle, font('semibold')]}>Live pulse snapshot</Text>
-          <Text style={[styles.muted, font('regular')]}>No active pulse in memory.</Text>
-        </View>
-      )}
+      ) : null}
 
       <View style={styles.card}>
-        <Text style={[styles.cardTitle, font('semibold')]}>Taste tags across logged nights</Text>
+        <Text style={[styles.cardTitle, font('semibold')]}>Recurring taste themes</Text>
         {topTags.length === 0 ? (
           <Text style={[styles.muted, font('regular')]}>
             Complete a relive flow with taps to populate tags.

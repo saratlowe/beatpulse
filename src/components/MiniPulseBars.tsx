@@ -35,22 +35,25 @@ export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
     return out;
   }, [vector, samples, barCount]);
 
-  const maxH = 52;
+  const maxH = 48;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 56 }}>
-      {heights.map((h, i) => (
-        <View
-          key={i}
-          style={{
-            width: 6,
-            marginRight: i === heights.length - 1 ? 0 : 3,
-            height: 4 + h * maxH,
-            backgroundColor: colors.accent,
-            borderRadius: 2,
-            opacity: 0.9,
-          }}
-        />
-      ))}
+    <View style={{ paddingHorizontal: 8, width: '100%' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 54, justifyContent: 'center' }}>
+        {heights.map((h, i) => (
+          <View
+            key={i}
+            style={{
+              width: 5,
+              marginRight: i === heights.length - 1 ? 0 : 2,
+              height: 4 + h * maxH,
+              maxHeight: 52,
+              backgroundColor: colors.accent,
+              borderRadius: 2,
+              opacity: 0.9,
+            }}
+          />
+        ))}
+      </View>
     </View>
   );
 }

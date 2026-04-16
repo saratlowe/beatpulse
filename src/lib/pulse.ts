@@ -448,6 +448,86 @@ export function recapInsightLines(sig: number[] | null, seed: number): string[] 
   return lines.slice(0, 3);
 }
 
+/** Merge optional free-text refine comment into stored/display taste lines */
+export function mergeTasteWithComment(taste: TasteSummary, comment: string): TasteSummary {
+  const c = comment.trim();
+  if (!c) return taste;
+  const snippet = c.length > 220 ? `${c.slice(0, 217)}…` : c;
+  return {
+    lines: [...taste.lines, `Your notes: ${snippet}`],
+    tags: taste.tags,
+  };
+}
+
+/** Pulse signature vector length from {@link buildPulseSignature} */
+export const PULSE_SIGNATURE_LENGTH = 12;
+
+export function medianOf(values: number[]): number {
+  if (values.length === 0) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+
+/**
+ * Overall listening pattern across nights: per-dimension median of saved signatures.
+ * Avoids time-warping different sets into one curve; captures "typical" energy/chaos/etc.
+ */
+export function buildAggregateProfilePulse(
+  signatures: (number[] | null | undefined)[]
+): number[] | null {
+  const rows = signatures.filter(
+    (s): s is number[] => !!s && s.length >= PULSE_SIGNATURE_LENGTH
+  );
+  if (rows.length === 0) return null;
+  const out: number[] = [];
+  for (let i = 0; i < PULSE_SIGNATURE_LENGTH; i++) {
+    out.push(medianOf(rows.map((r) => r[i]!)));
+  }
+  return out;
+}
+
+export type EventPulseSnapshot = {
+  pulseSignature: number[] | null;
+  tasteSummary: TasteSummary | null;
+};
+
+/** Taste lines + tags from aggregate pulse; tags favor themes recurring across multiple nights */
+export function buildAggregateTasteSummary(events: EventPulseSnapshot[]): TasteSummary {
+  const completed = events.filter((e) => e.pulseSignature && e.pulseSignature.length >= PULSE_SIGNATURE_LENGTH);
+  const agg = buildAggregateProfilePulse(completed.map((e) => e.pulseSignature));
+  if (!agg) {
+    return {
+      lines: ['Log and complete at least one set with taps to build a cross-night taste read.'],
+      tags: [],
+    };
+  }
+  const base = buildTasteSummary(agg);
+  const n = completed.length;
+  const tagWeights = new Map<string, number>();
+  for (const e of completed) {
+    const tags = e.tasteSummary?.tags ?? pulseToPreferenceTags(e.pulseSignature!);
+    const seen = new Set<string>();
+    for (const t of tags) {
+      if (seen.has(t)) continue;
+      seen.add(t);
+      tagWeights.set(t, (tagWeights.get(t) ?? 0) + 1);
+    }
+  }
+  const sortedTags = [...tagWeights.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 10)
+    .map(([t]) => t);
+  const head =
+    n === 1
+      ? 'Pattern from your saved set.'
+      : `Typical pulse across ${n} saved sets (median per dimension — not one blended waveform).`;
+  return {
+    lines: [head, ...base.lines.slice(0, 4)],
+    tags: sortedTags.length ? sortedTags : base.tags,
+  };
+}
+
 export function buildTasteSummary(sig: number[] | null): TasteSummary {
   if (!sig) {
     return {

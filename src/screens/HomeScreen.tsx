@@ -6,7 +6,7 @@ import {
   NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MiniPulseBars } from '../components/MiniPulseBars';
 import { usePulse } from '../context/PulseContext';
 import type { HomeStackParamList, RootTabParamList } from '../navigation/types';
@@ -19,8 +19,22 @@ type Nav = CompositeNavigationProp<
 >;
 
 export function HomeScreen({ navigation }: Props) {
-  const { loggedEvents, beginReliveSession } = usePulse();
+  const { loggedEvents, beginReliveSession, deleteLoggedEvent } = usePulse();
   const tabNav = navigation as unknown as Nav;
+
+  const confirmDelete = (eventId: string, artist: string) => {
+    const run = () => deleteLoggedEvent(eventId);
+    if (Platform.OS === 'web') {
+      if (typeof globalThis !== 'undefined' && (globalThis as { confirm?: (m: string) => boolean }).confirm?.(`Delete "${artist}"? This cannot be undone.`)) {
+        run();
+      }
+      return;
+    }
+    Alert.alert('Delete this night?', `Remove "${artist}" from your history?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: run },
+    ]);
+  };
 
   const goRelive = (eventId: string) => {
     beginReliveSession(eventId);
@@ -67,10 +81,19 @@ export function HomeScreen({ navigation }: Props) {
             ) : (
               <Text style={[styles.noPulse, font('regular')]}>No pulse saved for this night yet</Text>
             )}
-            <Pressable style={styles.cardBtn} onPress={() => goRelive(ev.id)}>
-              <MaterialIcons name="replay" size={20} color={colors.text} />
-              <Text style={[styles.cardBtnText, font('semibold')]}>Relive set</Text>
-            </Pressable>
+            <View style={styles.cardActions}>
+              <Pressable style={styles.cardBtn} onPress={() => goRelive(ev.id)}>
+                <MaterialIcons name="replay" size={20} color={colors.text} />
+                <Text style={[styles.cardBtnText, font('semibold')]}>Relive set</Text>
+              </Pressable>
+              <Pressable
+                style={styles.deleteBtn}
+                onPress={() => confirmDelete(ev.id, ev.artist)}
+                accessibilityLabel="Delete event"
+              >
+                <MaterialIcons name="delete-outline" size={22} color={colors.accent} />
+              </Pressable>
+            </View>
           </View>
         ))
       )}
@@ -110,8 +133,14 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: 14, marginTop: 2 },
   audio: { color: colors.cyan, fontSize: 13, marginTop: 10 },
   noPulse: { color: colors.muted, fontSize: 13, marginTop: 12 },
-  cardBtn: {
+  cardActions: {
     marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cardBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -121,4 +150,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   cardBtnText: { color: colors.text, fontSize: 15 },
+  deleteBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,46,99,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,46,99,0.35)',
+  },
 });

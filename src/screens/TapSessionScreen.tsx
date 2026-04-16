@@ -38,6 +38,7 @@ function formatTime(sec: number) {
 }
 
 const SPARK_MAX = 18;
+const SEEK_SEC = 10;
 
 export function TapSessionScreen({ navigation }: Props) {
   const route = useRoute<Props['route']>();
@@ -56,6 +57,8 @@ export function TapSessionScreen({ navigation }: Props) {
   const [positionSec, setPositionSec] = useState(0);
   const [durationSec, setDurationSec] = useState(selectedAudio?.durationSec ?? 300);
   const [playing, setPlaying] = useState(false);
+  /** True when the track has finished or is sitting at the end — center control shows Replay instead of Play */
+  const [playbackEnded, setPlaybackEnded] = useState(false);
   const [energy, setEnergy] = useState(BASELINE);
   const [intensity, setIntensity] = useState(BASELINE);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -95,6 +98,7 @@ export function TapSessionScreen({ navigation }: Props) {
     if (!selectedAudio) return;
     let cancelled = false;
     setLoadError(null);
+    setPlaybackEnded(false);
     (async () => {
       try {
         await Audio.setAudioModeAsync({
@@ -115,6 +119,17 @@ export function TapSessionScreen({ navigation }: Props) {
               setAudioDurationSec(d);
             }
             setPlaying(st.isPlaying);
+
+            const dur = st.durationMillis ?? 0;
+            const pos = st.positionMillis;
+            if (st.isPlaying) {
+              setPlaybackEnded(false);
+            } else if (st.didJustFinish) {
+              setPlaybackEnded(true);
+            } else if (dur > 0) {
+              if (pos >= dur - 220) setPlaybackEnded(true);
+              else if (pos < dur - 1500) setPlaybackEnded(false);
+            }
           }
         );
         if (cancelled) {
@@ -194,12 +209,47 @@ export function TapSessionScreen({ navigation }: Props) {
     if (!s) return;
     const st = await s.getStatusAsync();
     if (!st.isLoaded) return;
+    const dur = st.durationMillis ?? 0;
+    const pos = st.positionMillis;
+    const atEnd =
+      st.didJustFinish || (dur > 0 && !st.isPlaying && (playbackEnded || pos >= dur - 280));
+
+    if (atEnd) {
+      await s.setPositionAsync(0);
+      setPlaybackEnded(false);
+      if (sessionStartMs === null) setSessionMeta(Date.now());
+      await s.playAsync();
+      return;
+    }
     if (sessionStartMs === null) setSessionMeta(Date.now());
     if (st.isPlaying) await s.pauseAsync();
     else await s.playAsync();
   };
 
+  const seekBy = async (deltaSec: number) => {
+    const s = soundRef.current;
+    if (!s) return;
+    const st = await s.getStatusAsync();
+    if (!st.isLoaded || !st.durationMillis) return;
+    const nextMs = Math.max(
+      0,
+      Math.min(st.durationMillis, st.positionMillis + deltaSec * 1000)
+    );
+    await s.setPositionAsync(nextMs);
+    if (nextMs < st.durationMillis - 500) setPlaybackEnded(false);
+  };
+
+  const endExperience = async () => {
+    await unload();
+    setPlaying(false);
+    setPlaybackEnded(false);
+    navigation.navigate('RefineVibe');
+  };
+
   const canTap = playing;
+  const showReplayControl =
+    !playing &&
+    (playbackEnded || (durationSec > 0 && positionSec >= durationSec - 0.35));
 
   const onTap = () => {
     if (!playing) return;
@@ -315,15 +365,44 @@ export function TapSessionScreen({ navigation }: Props) {
       </View>
 
       <Text style={[styles.hint, font('regular')]}>
-        {playing ? 'Playing' : 'Paused'} · taps: {tapTimestampsMs.length}
+        {playing ? 'Playing' : showReplayControl ? 'Set ended' : 'Paused'} · taps: {tapTimestampsMs.length}
       </Text>
 
-      <Pressable style={styles.playBtn} onPress={togglePlay}>
-        <Text style={[styles.playText, font('semibold')]}>{playing ? 'Pause' : 'Play'} set</Text>
+      <View style={styles.transportRow}>
+        <Pressable
+          style={[styles.transportBtn, loadError && styles.transportDisabled]}
+          onPress={() => seekBy(-SEEK_SEC)}
+          disabled={!!loadError}
+        >
+          <MaterialIcons name="replay-10" size={28} color={colors.text} />
+        </Pressable>
+        <Pressable style={styles.playBtnCenter} onPress={togglePlay} disabled={!!loadError}>
+          <MaterialIcons
+            name={playing ? 'pause' : showReplayControl ? 'replay' : 'play-arrow'}
+            size={playing ? 36 : 34}
+            color={colors.text}
+          />
+        </Pressable>
+        <Pressable
+          style={[styles.transportBtn, loadError && styles.transportDisabled]}
+          onPress={() => seekBy(SEEK_SEC)}
+          disabled={!!loadError}
+        >
+          <MaterialIcons name="forward-10" size={28} color={colors.text} />
+        </Pressable>
+      </View>
+      <Text style={[styles.transportHint, font('regular')]}>
+        {showReplayControl
+          ? 'Tap center to replay from the start'
+          : 'Rewind / forward 10s'}
+      </Text>
+
+      <Pressable style={styles.finish} onPress={finish} disabled={!!loadError}>
+        <Text style={[styles.finishText, font('bold')]}>Continue to refine</Text>
       </Pressable>
 
-      <Pressable style={styles.finish} onPress={finish}>
-        <Text style={[styles.finishText, font('bold')]}>Continue to refine</Text>
+      <Pressable style={styles.endBtn} onPress={endExperience} disabled={!!loadError}>
+        <Text style={[styles.endBtnText, font('semibold')]}>End set &amp; go to refine</Text>
       </Pressable>
 
       <Pressable onPress={skipAll}>
@@ -409,6 +488,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cyan,
   },
   hint: { textAlign: 'center', color: colors.muted, marginTop: 16, fontSize: 13 },
+  transportRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  transportBtn: {
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  transportDisabled: { opacity: 0.35 },
   playBtn: {
     marginTop: 20,
     alignSelf: 'center',
@@ -418,8 +510,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   playText: { color: colors.text, fontSize: 15 },
+  playBtnCenter: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+  },
+  transportHint: { textAlign: 'center', color: colors.muted, fontSize: 11, marginTop: 6 },
+  endBtn: {
+    marginTop: 12,
+    alignSelf: 'stretch',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,46,99,0.45)',
+    alignItems: 'center',
+  },
+  endBtnText: { color: colors.accent, fontSize: 14 },
   finish: {
-    marginTop: 14,
+    marginTop: 18,
     backgroundColor: colors.accent,
     paddingVertical: 16,
     borderRadius: 16,

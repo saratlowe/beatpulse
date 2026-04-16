@@ -13,6 +13,7 @@ import {
   buildPulseSignature,
   buildPulseWaveform,
   buildTasteSummary,
+  mergeTasteWithComment,
   type RefineAnswers,
   type TasteSummary,
 } from '../lib/pulse';
@@ -28,12 +29,16 @@ export type LoggedEvent = {
   dateLabel: string;
   audioUri: string;
   audioTitle: string;
+  /** True for uploaded / imported audio — no shared “crowd” catalog for matching */
+  importAudio: boolean;
   createdAt: string;
   /** Filled after completing pulse signature step */
   pulseSignature: number[] | null;
   /** Tap-aligned curve over track length */
   pulseWaveform: number[] | null;
   tasteSummary: TasteSummary | null;
+  /** Refine-step comment saved with this night */
+  refineCommentSnapshot: string | null;
 };
 
 type PulseContextValue = {
@@ -68,6 +73,7 @@ type PulseContextValue = {
   newSessionSeed: () => void;
   persistActiveEventOutcome: () => void;
   clearSession: () => void;
+  deleteLoggedEvent: (eventId: string) => void;
 };
 
 const defaultRefine: RefineAnswers = {
@@ -106,6 +112,12 @@ function migrateLegacyEvent(raw: unknown): LoggedEvent | null {
       };
     }
   }
+  const importAudio =
+    typeof o.importAudio === 'boolean'
+      ? o.importAudio
+      : !(typeof audioUri === 'string' && audioUri.includes('soundhelix.com'));
+  const refineCommentSnapshot =
+    typeof o.refineCommentSnapshot === 'string' ? o.refineCommentSnapshot : null;
   return {
     id: o.id,
     artist: o.artist,
@@ -113,10 +125,12 @@ function migrateLegacyEvent(raw: unknown): LoggedEvent | null {
     dateLabel: typeof o.dateLabel === 'string' ? o.dateLabel : '',
     audioUri,
     audioTitle,
+    importAudio,
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
     pulseSignature,
     pulseWaveform,
     tasteSummary,
+    refineCommentSnapshot,
   };
 }
 
@@ -189,7 +203,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
     const wf = buildPulseWaveform(tapTimestampsMs, start, audioDurationSec);
     setPulseSignature(sig);
     setPulseWaveform(wf);
-    setTasteSummary(buildTasteSummary(sig));
+    setTasteSummary(mergeTasteWithComment(buildTasteSummary(sig), refineComment));
   }, [tapTimestampsMs, sessionStartMs, audioDurationSec, refineAnswers, refineComment]);
 
   const commitPulseSignature = useCallback(
@@ -207,7 +221,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       const wf = buildPulseWaveform(tapTimestampsMs, start, audioDurationSec);
       setPulseSignature(sig);
       setPulseWaveform(wf);
-      setTasteSummary(buildTasteSummary(sig));
+      setTasteSummary(mergeTasteWithComment(buildTasteSummary(sig), comment));
     },
     [tapTimestampsMs, sessionStartMs, audioDurationSec]
   );
@@ -219,6 +233,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
   const addLoggedEvent = useCallback(
     (e: { artist: string; venue: string; dateLabel: string; audio: AudioSet }) => {
       const id = `le_${Date.now()}`;
+      const importAudio = !e.audio.id.startsWith('edm-');
       const row: LoggedEvent = {
         id,
         artist: e.artist.trim(),
@@ -226,10 +241,12 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
         dateLabel: e.dateLabel.trim(),
         audioUri: e.audio.uri,
         audioTitle: e.audio.title,
+        importAudio,
         createdAt: new Date().toISOString(),
         pulseSignature: null,
         pulseWaveform: null,
         tasteSummary: null,
+        refineCommentSnapshot: null,
       };
       setLoggedEvents((prev) => {
         const next = [row, ...prev];
@@ -274,6 +291,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
 
   const persistActiveEventOutcome = useCallback(() => {
     if (!activeEventId) return;
+    const commentSnap = refineComment.trim() || null;
     setLoggedEvents((prev) => {
       const next = prev.map((row) =>
         row.id === activeEventId
@@ -282,13 +300,26 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
               pulseSignature,
               pulseWaveform,
               tasteSummary,
+              refineCommentSnapshot: commentSnap,
             }
           : row
       );
       persistLogged(next);
       return next;
     });
-  }, [activeEventId, pulseSignature, pulseWaveform, tasteSummary, persistLogged]);
+  }, [activeEventId, pulseSignature, pulseWaveform, tasteSummary, refineComment, persistLogged]);
+
+  const deleteLoggedEvent = useCallback(
+    (eventId: string) => {
+      setLoggedEvents((prev) => {
+        const next = prev.filter((row) => row.id !== eventId);
+        persistLogged(next);
+        return next;
+      });
+      setActiveEventId((cur) => (cur === eventId ? null : cur));
+    },
+    [persistLogged]
+  );
 
   const clearSession = useCallback(() => {
     setTapTimestamps([]);
@@ -330,6 +361,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       newSessionSeed,
       persistActiveEventOutcome,
       clearSession,
+      deleteLoggedEvent,
     }),
     [
       selectedAudio,
@@ -354,6 +386,7 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       newSessionSeed,
       persistActiveEventOutcome,
       clearSession,
+      deleteLoggedEvent,
     ]
   );
 
