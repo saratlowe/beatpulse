@@ -1,128 +1,156 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { usePulse } from '../context/PulseContext';
+import {
+  EMPTY_REFINE_SECTION_COMMENTS,
+  REFINE_CHIP_CATEGORIES,
+  type RefineChipCategory,
+} from '../lib/refineChips';
 import type { LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
 type Props = NativeStackScreenProps<LogStackParamList, 'RefineVibe'>;
 
-function TriState({
+type TabId = 'sound' | 'energy' | 'experience';
+
+const TAB_ORDER: { id: TabId; label: string; categoryId: string }[] = [
+  { id: 'sound', label: 'Sound', categoryId: 'sound' },
+  { id: 'energy', label: 'Energy', categoryId: 'energy' },
+  { id: 'experience', label: 'Vibe', categoryId: 'experience' },
+];
+
+function TagChip({
   label,
-  value,
-  onChange,
-  left,
-  right,
+  selected,
+  onPress,
 }: {
   label: string;
-  value: boolean | null;
-  onChange: (v: boolean | null) => void;
-  left: string;
-  right: string;
+  selected: boolean;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.qBlock}>
-      <Text style={[styles.qTitle, font('semibold')]}>{label}</Text>
-      <View style={styles.triRow}>
-        <Text style={[styles.end, font('regular')]}>{left}</Text>
-        <View style={styles.btns}>
-          <Pressable
-            style={[styles.chip, value === true && styles.chipOn]}
-            onPress={() => onChange(true)}
-          >
-            <Text style={[styles.chipText, font('medium')]}>Yes</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.chip, value === false && styles.chipOn]}
-            onPress={() => onChange(false)}
-          >
-            <Text style={[styles.chipText, font('medium')]}>No</Text>
-          </Pressable>
-          <Pressable style={styles.chip} onPress={() => onChange(null)}>
-            <Text style={[styles.chipText, font('medium')]}>Skip</Text>
-          </Pressable>
-        </View>
-        <Text style={[styles.end, font('regular')]}>{right}</Text>
-      </View>
-    </View>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        selected && styles.chipOn,
+        pressed && { opacity: 0.88 },
+      ]}
+    >
+      <Text style={[styles.chipText, font('medium')]}>{label}</Text>
+    </Pressable>
   );
 }
 
 export function RefineVibeScreen({ navigation }: Props) {
-  const { refineAnswers, setRefineAnswers, refineComment, setRefineComment, commitPulseSignature, tapTimestampsMs } =
-    usePulse();
+  const { refineAnswers, setRefineAnswers, commitPulseSignature, tapTimestampsMs } = usePulse();
+
+  const [tab, setTab] = useState<TabId>('sound');
+
+  const toggleTag = useCallback(
+    (label: string) => {
+      const set = new Set(refineAnswers.selectedTags);
+      if (set.has(label)) set.delete(label);
+      else set.add(label);
+      setRefineAnswers({ ...refineAnswers, selectedTags: [...set] });
+    },
+    [refineAnswers, setRefineAnswers]
+  );
+
+  const activeCategory: RefineChipCategory | undefined = REFINE_CHIP_CATEGORIES.find(
+    (c) => c.id === TAB_ORDER.find((t) => t.id === tab)?.categoryId
+  );
 
   const submit = () => {
-    commitPulseSignature(refineAnswers, refineComment);
+    commitPulseSignature(refineAnswers);
     navigation.navigate('PulseSignature');
   };
 
   const skipFlow = () => {
-    commitPulseSignature(
-      {
-        chaosLeansChaos: null,
-        darkLeansDark: null,
-        predictableLeansPredictable: null,
-      },
-      ''
-    );
+    commitPulseSignature({
+      selectedTags: [],
+      sectionComments: { ...EMPTY_REFINE_SECTION_COMMENTS },
+    });
     navigation.navigate('PulseSignature');
   };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <StatusBar style="light" />
-      <Text style={[styles.title, font('bold')]}>Refine the vibe</Text>
+      <Text style={[styles.title, font('bold')]}>What was this set like?</Text>
       <Text style={[styles.sub, font('regular')]}>
         {tapTimestampsMs.length === 0
-          ? 'You skipped tapping — your pulse signature will stay empty until you engage with the set.'
-          : 'These answers layer on top of your taps. Skip anything you are unsure about.'}
+          ? 'You skipped tapping — your pulse curve stays empty. Tags still help tune taste for events.'
+          : 'Tap chips that fit — no wrong answers. Switch tabs to see more options.'}
       </Text>
 
       <Pressable style={styles.backRow} onPress={() => navigation.goBack()}>
         <Text style={[styles.backText, font('medium')]}>← Back to tapping</Text>
       </Pressable>
 
-      <TriState
-        label="Does this set feel chaotic?"
-        left="Chaos"
-        right="Structure"
-        value={refineAnswers.chaosLeansChaos}
-        onChange={(chaosLeansChaos) => setRefineAnswers({ ...refineAnswers, chaosLeansChaos })}
-      />
-      <TriState
-        label="Does it feel dark?"
-        left="Dark"
-        right="Uplifting"
-        value={refineAnswers.darkLeansDark}
-        onChange={(darkLeansDark) => setRefineAnswers({ ...refineAnswers, darkLeansDark })}
-      />
-      <TriState
-        label="Does it feel predictable?"
-        left="Predictable"
-        right="Surprising"
-        value={refineAnswers.predictableLeansPredictable}
-        onChange={(predictableLeansPredictable) =>
-          setRefineAnswers({ ...refineAnswers, predictableLeansPredictable })
-        }
-      />
+      <View style={styles.tabRow}>
+        {TAB_ORDER.map((t) => (
+          <Pressable
+            key={t.id}
+            style={[styles.tab, tab === t.id && styles.tabOn]}
+            onPress={() => setTab(t.id)}
+          >
+            <Text style={[styles.tabText, font('semibold'), tab === t.id && styles.tabTextOn]}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
 
-      <Text style={[styles.cmtLabel, font('medium')]}>Comment (optional)</Text>
-      <TextInput
-        value={refineComment}
-        onChangeText={setRefineComment}
-        placeholder="What stood out?"
-        placeholderTextColor={colors.muted}
-        multiline
-        style={[styles.input, font('regular')]}
-      />
+      {activeCategory ? (
+        <View style={styles.sectionCard}>
+          <Text style={[styles.sectionTitle, font('semibold')]}>{activeCategory.title}</Text>
+          <Text style={[styles.sectionHint, font('regular')]}>Multi-select · {activeCategory.tags.length} options</Text>
+          <View style={styles.chipWrap}>
+            {activeCategory.tags.map((tag) => (
+              <TagChip
+                key={tag}
+                label={tag}
+                selected={refineAnswers.selectedTags.includes(tag)}
+                onPress={() => toggleTag(tag)}
+              />
+            ))}
+          </View>
+          <Text style={[styles.noteLabel, font('medium')]}>Notes for this section (optional)</Text>
+          <Text style={[styles.noteHint, font('regular')]}>
+            Saved per tab — all sections you write in show on your pulse summary after refine.
+          </Text>
+          <TextInput
+            value={refineAnswers.sectionComments[tab]}
+            onChangeText={(t) =>
+              setRefineAnswers({
+                ...refineAnswers,
+                sectionComments: { ...refineAnswers.sectionComments, [tab]: t },
+              })
+            }
+            placeholder={`Anything about ${activeCategory.title.toLowerCase()}…`}
+            placeholderTextColor={colors.muted}
+            multiline
+            style={[styles.input, font('regular')]}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.summaryCard}>
+        <Text style={[styles.summaryLabel, font('medium')]}>Selected ({refineAnswers.selectedTags.length})</Text>
+        <Text style={[styles.summaryText, font('regular')]} numberOfLines={3}>
+          {refineAnswers.selectedTags.length
+            ? refineAnswers.selectedTags.join(' · ')
+            : 'None yet — pick a few chips above.'}
+        </Text>
+      </View>
 
       <Pressable style={styles.primary} onPress={submit}>
         <Text style={[styles.primaryText, font('bold')]}>Generate pulse signature</Text>
       </Pressable>
 
       <Pressable onPress={skipFlow}>
-        <Text style={[styles.opt, font('medium')]}>Use defaults &amp; skip comment</Text>
+        <Text style={[styles.opt, font('medium')]}>Skip tags &amp; notes</Text>
       </Pressable>
     </ScrollView>
   );
@@ -130,43 +158,95 @@ export function RefineVibeScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, paddingBottom: 40 },
-  title: { color: colors.text, fontSize: 22, marginBottom: 8, textAlign: 'center' },
-  sub: { color: colors.muted, fontSize: 13, marginBottom: 14, textAlign: 'center', lineHeight: 18 },
-  backRow: { alignSelf: 'center', marginBottom: 16 },
-  backText: { color: colors.cyan, fontSize: 14 },
-  qBlock: { marginBottom: 20 },
-  qTitle: { color: colors.text, fontSize: 15, marginBottom: 10, textAlign: 'center' },
-  triRow: { alignItems: 'center' },
-  end: { color: colors.muted, fontSize: 12, textAlign: 'center', marginBottom: 8 },
-  btns: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
-  chip: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
+  content: { padding: 22, paddingBottom: 48 },
+  title: { color: colors.text, fontSize: 24, marginBottom: 10, textAlign: 'center', lineHeight: 30 },
+  sub: {
+    color: colors.muted,
+    fontSize: 14,
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 21,
+    paddingHorizontal: 8,
   },
-  chipOn: { borderWidth: 1, borderColor: colors.cyan },
-  chipText: { color: colors.text, fontSize: 14 },
-  cmtLabel: { color: colors.text, marginBottom: 8, marginTop: 8 },
-  input: {
+  backRow: { alignSelf: 'center', marginBottom: 20 },
+  backText: { color: colors.cyan, fontSize: 15 },
+  tabRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 18,
+  },
+  tab: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 14,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: '#2a3148',
+  },
+  tabOn: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(255,46,99,0.12)',
+  },
+  tabText: { color: colors.muted, fontSize: 14 },
+  tabTextOn: { color: colors.text },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#232a3d',
+  },
+  sectionTitle: { color: colors.text, fontSize: 17, marginBottom: 6 },
+  sectionHint: { color: colors.muted, fontSize: 12, marginBottom: 14 },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  chip: {
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: '#2a3148',
+  },
+  chipOn: {
+    borderColor: colors.cyan,
+    backgroundColor: 'rgba(0,245,255,0.1)',
+  },
+  chipText: { color: colors.text, fontSize: 14 },
+  summaryCard: {
+    backgroundColor: 'rgba(0,245,255,0.06)',
     borderRadius: 14,
     padding: 14,
-    minHeight: 88,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,245,255,0.2)',
+  },
+  summaryLabel: { color: colors.muted, fontSize: 12, marginBottom: 6, textTransform: 'uppercase' },
+  summaryText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  noteLabel: { color: colors.text, marginTop: 18, marginBottom: 6, fontSize: 14 },
+  noteHint: { color: colors.muted, fontSize: 12, marginBottom: 10, lineHeight: 17 },
+  input: {
+    backgroundColor: colors.bg,
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 96,
     color: colors.text,
     textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: '#2a3148',
   },
   primary: {
-    marginTop: 22,
+    marginTop: 24,
     backgroundColor: colors.accent,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: colors.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
   },
   primaryText: { color: colors.text, fontSize: 17 },
-  opt: { marginTop: 16, textAlign: 'center', color: colors.muted, fontSize: 13 },
+  opt: { marginTop: 18, textAlign: 'center', color: colors.muted, fontSize: 14 },
 });

@@ -1,5 +1,3 @@
-import { matchPercent } from './pulse';
-
 export {
   explainFriendMatch,
   FAKE_FRIENDS,
@@ -9,8 +7,11 @@ export {
   type RankedFakeFriend,
 } from './fakeFriends';
 
-/** 0–100 match for list rows (same as rankFakeFriends’ similarityPercent). */
-export function crowdMatchScore(userPulse: number[] | null, friend: { pulse: number[] }): number {
+/** 0–100 shown on cards — each fake friend carries a fixed demo %; wave blend follows it. */
+export function crowdMatchScore(
+  userPulse: number[] | null,
+  friend: { demoPulseMatchPercent: number }
+): number {
   if (!userPulse?.length) return 0;
-  return matchPercent(userPulse, friend.pulse);
+  return friend.demoPulseMatchPercent;
 }

@@ -37,7 +37,8 @@ export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
 
   const maxH = 48;
   return (
-    <View style={{ paddingHorizontal: 8, width: '100%' }}>
+    <View style={{ width: '100%', overflow: 'hidden', borderRadius: 8 }}>
+      <View style={{ paddingHorizontal: 8, width: '100%' }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 54, justifyContent: 'center' }}>
         {heights.map((h, i) => (
           <View
@@ -53,6 +54,7 @@ export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
             }}
           />
         ))}
+      </View>
       </View>
     </View>
   );

@@ -1,13 +1,19 @@
+import {
+  chipLabelsToPreferenceHints,
+  refineChipsToSignatureBias,
+  type RefineSectionComments,
+} from './refineChips';
+
 /**
  * Pulse signature: 12-dimensional vector — tap-heavy fingerprint + refine + meta.
  * Tap dimensions are nonlinear mixes so different tap patterns produce visibly different profiles.
  * Returns null when there were no taps (opt-out / skip before engaging).
  */
 
+/** Multi-select vibe chips + per-tab notes from the refine step (see refineChips.ts). */
 export type RefineAnswers = {
-  chaosLeansChaos: boolean | null;
-  darkLeansDark: boolean | null;
-  predictableLeansPredictable: boolean | null;
+  selectedTags: string[];
+  sectionComments: RefineSectionComments;
 };
 
 export type TasteSummary = {
@@ -127,25 +133,21 @@ export function tapTimestampsToFeatures(
   return [energy, irregularity, rhythmStability, burstiness, balance, fingerprint];
 }
 
-function boolToDim(v: boolean | null, ifTrue: number, ifFalse: number): number {
-  if (v === null) return 0.5;
-  return v ? ifTrue : ifFalse;
-}
-
 export function buildPulseSignature(
   tapMs: number[],
   sessionStartMs: number,
   audioDurationSec: number,
-  answers: RefineAnswers,
-  comment: string
+  answers: RefineAnswers
 ): number[] | null {
   if (tapMs.length === 0) return null;
 
   const t = tapTimestampsToFeatures(tapMs, sessionStartMs, audioDurationSec, true);
-  const chaos = boolToDim(answers.chaosLeansChaos, 1, 0);
-  const dark = boolToDim(answers.darkLeansDark, 1, 0);
-  const pred = boolToDim(answers.predictableLeansPredictable, 1, 0);
-  const commentSignal = clamp01(comment.trim().length / 280);
+  const tags = answers.selectedTags ?? [];
+  const [chaos, dark, pred] = refineChipsToSignatureBias(tags);
+  const sc = answers.sectionComments;
+  const noteLen =
+    sc.sound.trim().length + sc.energy.trim().length + sc.experience.trim().length;
+  const commentSignal = clamp01(noteLen / 400);
   const durationNorm = clamp01(audioDurationSec / 720);
   const tapCountNorm = clamp01(tapMs.length / 120);
 
@@ -169,6 +171,65 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 export function matchPercent(a: number[], b: number[]): number {
   const c = cosineSimilarity(a, b);
   return Math.round(Math.max(0, Math.min(100, ((c + 1) / 2) * 100)));
+}
+
+/**
+ * Crowd / friend match: 0–100 from RMSE across the pulse vector (tighter spread than cosine on 0–1 features).
+ */
+export function signatureMatchPercent(a: number[] | null | undefined, b: number[] | null | undefined): number {
+  if (!a?.length || !b?.length) return 0;
+  const n = Math.min(a.length, b.length);
+  let s = 0;
+  for (let i = 0; i < n; i++) s += (a[i]! - b[i]!) ** 2;
+  const rmse = Math.sqrt(s / n);
+  const sim = Math.exp(-rmse * 9);
+  return Math.round(100 * clamp01(sim));
+}
+
+function smoothstep01(edge0: number, edge1: number, x: number): number {
+  const t = clamp01((x - edge0) / Math.max(1e-6, edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
+/** Display-only: high match % → blend friend visuals toward the user so curves look alike. */
+export function crowdDisplayBlendFromMatchPct(matchPct: number): number {
+  return smoothstep01(14, 76, matchPct);
+}
+
+export function blendPulseVectors(
+  user: number[] | null | undefined,
+  friend: number[],
+  blend01: number
+): number[] {
+  const tt = clamp01(blend01);
+  const n = friend.length;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const f = friend[i] ?? 0;
+    const u = user && i < user.length ? user[i]! : f;
+    out.push(clamp01(f * (1 - tt) + u * tt));
+  }
+  return out;
+}
+
+export function blendWaveforms(
+  user: number[] | null | undefined,
+  friend: number[],
+  blend01: number
+): number[] {
+  const tt = clamp01(blend01);
+  if (!user?.length) return [...friend];
+  const nu = user.length;
+  const nf = friend.length;
+  const out: number[] = [];
+  for (let i = 0; i < nf; i++) {
+    const f = friend[i] ?? 0;
+    const t = nf <= 1 ? 0 : i / (nf - 1);
+    const ui = Math.min(nu - 1, Math.max(0, Math.round(t * (nu - 1))));
+    const u = user[ui] ?? f;
+    out.push(clamp01(f * (1 - tt) + u * tt));
+  }
+  return out;
 }
 
 /** Map pulse dimensions to coarse tags for themed-event matching */
@@ -448,15 +509,27 @@ export function recapInsightLines(sig: number[] | null, seed: number): string[] 
   return lines.slice(0, 3);
 }
 
-/** Merge optional free-text refine comment into stored/display taste lines */
-export function mergeTasteWithComment(taste: TasteSummary, comment: string): TasteSummary {
-  const c = comment.trim();
-  if (!c) return taste;
-  const snippet = c.length > 220 ? `${c.slice(0, 217)}…` : c;
-  return {
-    lines: [...taste.lines, `Your notes: ${snippet}`],
-    tags: taste.tags,
-  };
+const SECTION_NOTE_LABELS: Record<keyof RefineSectionComments, string> = {
+  sound: 'Sound / genre',
+  energy: 'Energy / feel',
+  experience: 'Experience / context',
+};
+
+/** Append non-empty per-section refine notes to the deterministic taste recap. */
+export function mergeTasteWithSectionComments(
+  taste: TasteSummary,
+  sectionComments: RefineSectionComments
+): TasteSummary {
+  const keys: (keyof RefineSectionComments)[] = ['sound', 'energy', 'experience'];
+  const extras: string[] = [];
+  for (const key of keys) {
+    const c = sectionComments[key].trim();
+    if (!c) continue;
+    const snippet = c.length > 160 ? `${c.slice(0, 157)}…` : c;
+    extras.push(`Notes (${SECTION_NOTE_LABELS[key]}): ${snippet}`);
+  }
+  if (!extras.length) return taste;
+  return { lines: [...taste.lines, ...extras], tags: taste.tags };
 }
 
 /** Pulse signature vector length from {@link buildPulseSignature} */
@@ -490,6 +563,7 @@ export function buildAggregateProfilePulse(
 export type EventPulseSnapshot = {
   pulseSignature: number[] | null;
   tasteSummary: TasteSummary | null;
+  refineTagsSnapshot?: string[] | null;
 };
 
 /** Taste lines + tags from aggregate pulse; tags favor themes recurring across multiple nights */
@@ -506,9 +580,12 @@ export function buildAggregateTasteSummary(events: EventPulseSnapshot[]): TasteS
   const n = completed.length;
   const tagWeights = new Map<string, number>();
   for (const e of completed) {
-    const tags = e.tasteSummary?.tags ?? pulseToPreferenceTags(e.pulseSignature!);
+    const fromPulse = pulseToPreferenceTags(e.pulseSignature!);
+    const fromStored = e.tasteSummary?.tags ?? [];
+    const fromChips = chipLabelsToPreferenceHints(e.refineTagsSnapshot ?? []);
+    const merged = [...fromPulse, ...fromStored, ...fromChips];
     const seen = new Set<string>();
-    for (const t of tags) {
+    for (const t of merged) {
       if (seen.has(t)) continue;
       seen.add(t);
       tagWeights.set(t, (tagWeights.get(t) ?? 0) + 1);
@@ -528,8 +605,17 @@ export function buildAggregateTasteSummary(events: EventPulseSnapshot[]): TasteS
   };
 }
 
-export function buildTasteSummary(sig: number[] | null): TasteSummary {
+export function buildTasteSummary(sig: number[] | null, refineChipLabels?: string[]): TasteSummary {
   if (!sig) {
+    const chipTags = chipLabelsToPreferenceHints(refineChipLabels ?? []);
+    if (chipTags.length) {
+      return {
+        lines: [
+          'No tap fingerprint this time — your vibe chips still tune recommendations and the written recap where we can.',
+        ],
+        tags: chipTags,
+      };
+    }
     return {
       lines: ['No pulse captured — you skipped tapping or left before engaging.'],
       tags: [],
@@ -582,8 +668,9 @@ export function buildTasteSummary(sig: number[] | null): TasteSummary {
     lines.push('You reward unpredictability — left turns keep you tapping.');
   }
 
-  const tags = pulseToPreferenceTags(sig);
-  return { lines: lines.slice(0, 5), tags };
+  const tags = new Set(pulseToPreferenceTags(sig));
+  for (const t of chipLabelsToPreferenceHints(refineChipLabels ?? [])) tags.add(t);
+  return { lines: lines.slice(0, 5), tags: Array.from(tags) };
 }
 
 export function insightLines(sig: number[] | null): string[] {

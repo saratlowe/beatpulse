@@ -78,7 +78,7 @@ export function PulseSignatureScreen({ navigation }: Props) {
           <Text style={[styles.emptyTitle, font('semibold')]}>No tap curve for this session</Text>
           <Text style={[styles.emptySub, font('regular')]}>
             We only draw the time graph when there are taps along the track. Your summary below still reflects
-            refine answers where we could infer a pulse.
+            your vibe tags and tap timing where we could infer a pulse.
           </Text>
         </View>
       ) : (

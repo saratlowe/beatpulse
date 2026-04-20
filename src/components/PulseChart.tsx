@@ -59,7 +59,7 @@ export function PulseChart({ waveform, vector, width, height, timeLabels, horizo
   const fillPath = `${path} L ${width - inset} ${height} L ${inset} ${height} Z`;
 
   return (
-    <View>
+    <View style={{ width, borderRadius: 12, overflow: 'hidden' }}>
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="pulseFill" x1="0" y1="0" x2="0" y2="1">

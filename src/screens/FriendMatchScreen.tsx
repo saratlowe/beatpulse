@@ -4,14 +4,15 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MiniPulseBars } from '../components/MiniPulseBars';
 import { usePulse } from '../context/PulseContext';
-import { crowdMatchScore, rankFakeFriends } from '../lib/crowdMatch';
+import { rankFakeFriends } from '../lib/crowdMatch';
+import { blendWaveforms, crowdDisplayBlendFromMatchPct } from '../lib/pulse';
 import type { LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
 type Props = NativeStackScreenProps<LogStackParamList, 'FriendMatch'>;
 
 export function FriendMatchScreen({ navigation }: Props) {
-  const { pulseSignature, activeEventId, loggedEvents } = usePulse();
+  const { pulseSignature, pulseWaveform, activeEventId, loggedEvents } = usePulse();
   const activeEvent = activeEventId ? loggedEvents.find((e) => e.id === activeEventId) : null;
   const noSharedCrowd = activeEvent?.importAudio === true;
   const crowd = noSharedCrowd ? [] : rankFakeFriends(pulseSignature);
@@ -27,7 +28,7 @@ export function FriendMatchScreen({ navigation }: Props) {
       <Text style={[styles.sub, font('regular')]}>
         {noSharedCrowd
           ? 'Crowd match uses a demo catalog tied to well-known tracks. Imported MP3s and personal files are not in that shared pool.'
-          : 'Demo crowd with their own pulse shapes. Match % is how similar their energy is to yours — tap someone for a side-by-side compare, then use back to return here and continue to event recommendations.'}
+          : 'Demo crowd: each person has a fixed match % for this build (spread from high to low). Their mini graph blends toward your tap curve when the % is high so it reads like a real compare — tap someone for details, then back to continue.'}
       </Text>
 
       <Pressable style={styles.backRow} onPress={() => navigation.goBack()}>
@@ -42,8 +43,12 @@ export function FriendMatchScreen({ navigation }: Props) {
         </View>
       ) : (
         <View style={styles.hero}>
-          <Text style={[styles.heroLabel, font('medium')]}>Your pulse (this set)</Text>
-          <MiniPulseBars vector={pulseSignature} barCount={32} />
+          <Text style={[styles.heroLabel, font('medium')]}>Your taps along the set</Text>
+          {pulseWaveform && pulseWaveform.length > 1 ? (
+            <MiniPulseBars samples={pulseWaveform} barCount={32} />
+          ) : (
+            <MiniPulseBars vector={pulseSignature} barCount={32} />
+          )}
         </View>
       )}
 
@@ -58,7 +63,12 @@ export function FriendMatchScreen({ navigation }: Props) {
         </View>
       ) : (
         crowd.map((u) => {
-          const pct = crowdMatchScore(pulseSignature, u);
+          const pct = u.similarityPercent;
+          const blend = crowdDisplayBlendFromMatchPct(pct);
+          const friendWf =
+            pulseWaveform && pulseWaveform.length > 1
+              ? blendWaveforms(pulseWaveform, u.waveform, blend)
+              : u.waveform;
           return (
             <Pressable
               key={u.id}
@@ -69,13 +79,13 @@ export function FriendMatchScreen({ navigation }: Props) {
                 <View style={[styles.avatar, { backgroundColor: u.avatarColor }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.name, font('semibold')]}>{u.name}</Text>
-                  <Text style={[styles.pct, font('bold')]}>{pct}% similar energy</Text>
+                  <Text style={[styles.pct, font('bold')]}>{pct}% pulse match</Text>
                   <Text style={[styles.reason, font('regular')]}>{u.tagline}</Text>
                 </View>
                 <Text style={[styles.chev, font('medium')]}>›</Text>
               </View>
               <View style={{ marginTop: 12 }}>
-                <MiniPulseBars samples={u.waveform} barCount={28} />
+                <MiniPulseBars samples={friendWf} barCount={28} />
               </View>
             </Pressable>
           );

@@ -7,7 +7,12 @@ import { MiniPulseBars } from '../components/MiniPulseBars';
 import { PulseChart } from '../components/PulseChart';
 import { usePulse } from '../context/PulseContext';
 import { explainFriendMatch, getFakeFriend } from '../lib/fakeFriends';
-import { buildAggregateProfilePulse } from '../lib/pulse';
+import {
+  blendPulseVectors,
+  blendWaveforms,
+  buildAggregateProfilePulse,
+  crowdDisplayBlendFromMatchPct,
+} from '../lib/pulse';
 import type { DiscoverStackParamList, LogStackParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
@@ -87,6 +92,13 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
   }
 
   const explain = explainFriendMatch(viewerSig, friend);
+  const matchPct = friend.demoPulseMatchPercent;
+  const blend = crowdDisplayBlendFromMatchPct(viewerSig?.length ? matchPct : 0);
+  const friendWaveDisplay =
+    viewerWave && viewerWave.length > 1
+      ? blendWaveforms(viewerWave, friend.waveform, blend)
+      : friend.waveform;
+  const friendPulseDisplay = blendPulseVectors(viewerSig, friend.pulse, blend * 0.94);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -117,9 +129,12 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
       </View>
 
       <Text style={[styles.section, font('semibold')]}>{friend.name.split(' ')[0]}&apos;s waveform</Text>
-      <Text style={[styles.caption, font('regular')]}>Demo shape for this profile.</Text>
+      <Text style={[styles.caption, font('regular')]}>
+        Demo profile — the match % on the crowd list is fixed per person for this build; this curve blends toward yours
+        when that % is high so the side-by-side reads clearly, and stays distinct when it&apos;s low.
+      </Text>
       <View style={styles.card}>
-        <PulseChart waveform={friend.waveform} width={chartW} height={120} horizontalInset={14} />
+        <PulseChart waveform={friendWaveDisplay} width={chartW} height={120} horizontalInset={14} />
       </View>
 
       <Text style={[styles.section, font('semibold')]}>Side-by-side energy bars</Text>
@@ -134,7 +149,7 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
         </View>
         <View style={styles.half}>
           <Text style={[styles.miniLab, font('medium')]}>Them</Text>
-          <MiniPulseBars vector={friend.pulse} barCount={28} />
+          <MiniPulseBars vector={friendPulseDisplay} barCount={28} />
         </View>
       </View>
 

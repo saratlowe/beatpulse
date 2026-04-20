@@ -101,7 +101,7 @@ export function DiscoverScreen({ navigation }: Props) {
               <View style={[styles.avatar, { backgroundColor: u.avatarColor }]} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.name, font('semibold')]}>{u.name}</Text>
-                <Text style={[styles.match, font('bold')]}>{crowdMatchScore(profilePulse, u)}% similar energy</Text>
+                <Text style={[styles.match, font('bold')]}>{crowdMatchScore(profilePulse, u)}% pulse match</Text>
                 <Text style={[styles.reason, font('regular')]} numberOfLines={2}>
                   {u.tagline}
                 </Text>

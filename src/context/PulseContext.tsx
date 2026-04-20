@@ -10,10 +10,15 @@ import React, {
 import type { AudioSet } from '../lib/data';
 import { FALLBACK_AUDIO } from '../lib/data';
 import {
+  EMPTY_REFINE_SECTION_COMMENTS,
+  inferGenreTagsFromArtist,
+  migrateRefineAnswers,
+} from '../lib/refineChips';
+import {
   buildPulseSignature,
   buildPulseWaveform,
   buildTasteSummary,
-  mergeTasteWithComment,
+  mergeTasteWithSectionComments,
   type RefineAnswers,
   type TasteSummary,
 } from '../lib/pulse';
@@ -37,8 +42,16 @@ export type LoggedEvent = {
   /** Tap-aligned curve over track length */
   pulseWaveform: number[] | null;
   tasteSummary: TasteSummary | null;
-  /** Refine-step comment saved with this night */
+  /** Legacy single refine note (older saves); migrated into section snapshot when missing */
   refineCommentSnapshot: string | null;
+  /** Per-tab refine notes when the night was saved */
+  refineSectionCommentsSnapshot: {
+    sound: string | null;
+    energy: string | null;
+    experience: string | null;
+  } | null;
+  /** Vibe chips selected on refine when the night was saved */
+  refineTagsSnapshot: string[] | null;
 };
 
 type PulseContextValue = {
@@ -54,13 +67,11 @@ type PulseContextValue = {
   setAudioDurationSec: (s: number) => void;
   refineAnswers: RefineAnswers;
   setRefineAnswers: (r: RefineAnswers) => void;
-  refineComment: string;
-  setRefineComment: (s: string) => void;
   pulseSignature: number[] | null;
   pulseWaveform: number[] | null;
   tasteSummary: TasteSummary | null;
   recomputePulse: () => void;
-  commitPulseSignature: (answers: RefineAnswers, comment: string) => void;
+  commitPulseSignature: (answers: RefineAnswers) => void;
   loggedEvents: LoggedEvent[];
   activeEventId: string | null;
   addLoggedEvent: (e: {
@@ -77,9 +88,8 @@ type PulseContextValue = {
 };
 
 const defaultRefine: RefineAnswers = {
-  chaosLeansChaos: null,
-  darkLeansDark: null,
-  predictableLeansPredictable: null,
+  selectedTags: [],
+  sectionComments: { ...EMPTY_REFINE_SECTION_COMMENTS },
 };
 
 const PulseContext = createContext<PulseContextValue | null>(null);
@@ -118,6 +128,29 @@ function migrateLegacyEvent(raw: unknown): LoggedEvent | null {
       : !(typeof audioUri === 'string' && audioUri.includes('soundhelix.com'));
   const refineCommentSnapshot =
     typeof o.refineCommentSnapshot === 'string' ? o.refineCommentSnapshot : null;
+
+  let refineSectionCommentsSnapshot: LoggedEvent['refineSectionCommentsSnapshot'] = null;
+  const scRaw = o.refineSectionCommentsSnapshot;
+  if (scRaw && typeof scRaw === 'object') {
+    const r = scRaw as Record<string, unknown>;
+    const sound = typeof r.sound === 'string' ? r.sound : null;
+    const energy = typeof r.energy === 'string' ? r.energy : null;
+    const experience = typeof r.experience === 'string' ? r.experience : null;
+    if (sound?.trim() || energy?.trim() || experience?.trim()) {
+      refineSectionCommentsSnapshot = { sound, energy, experience };
+    }
+  } else if (refineCommentSnapshot?.trim()) {
+    refineSectionCommentsSnapshot = {
+      sound: refineCommentSnapshot,
+      energy: null,
+      experience: null,
+    };
+  }
+
+  let refineTagsSnapshot: string[] | null = null;
+  if (Array.isArray(o.refineTagsSnapshot) && o.refineTagsSnapshot.every((x) => typeof x === 'string')) {
+    refineTagsSnapshot = o.refineTagsSnapshot as string[];
+  }
   return {
     id: o.id,
     artist: o.artist,
@@ -131,6 +164,8 @@ function migrateLegacyEvent(raw: unknown): LoggedEvent | null {
     pulseWaveform,
     tasteSummary,
     refineCommentSnapshot,
+    refineSectionCommentsSnapshot,
+    refineTagsSnapshot,
   };
 }
 
@@ -141,7 +176,6 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
   const [sessionSeed, setSessionSeed] = useState(() => `s_${Date.now()}`);
   const [audioDurationSec, setAudioDurationSec] = useState(FALLBACK_AUDIO.durationSec);
   const [refineAnswers, setRefineAnswers] = useState<RefineAnswers>(defaultRefine);
-  const [refineComment, setRefineComment] = useState('');
   const [pulseSignature, setPulseSignature] = useState<number[] | null>(null);
   const [pulseWaveform, setPulseWaveform] = useState<number[] | null>(null);
   const [tasteSummary, setTasteSummary] = useState<TasteSummary | null>(null);
@@ -164,7 +198,13 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
           }
         }
         const r = await AsyncStorage.getItem(STORAGE_REFINE);
-        if (r) setRefineAnswers(JSON.parse(r));
+        if (r) {
+          try {
+            setRefineAnswers(migrateRefineAnswers(JSON.parse(r)));
+          } catch {
+            setRefineAnswers(defaultRefine);
+          }
+        }
       } catch {
         /* ignore */
       }
@@ -193,35 +233,32 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
 
   const recomputePulse = useCallback(() => {
     const start = sessionStartMs ?? Date.now();
-    const sig = buildPulseSignature(
-      tapTimestampsMs,
-      start,
-      audioDurationSec,
-      refineAnswers,
-      refineComment
-    );
+    const sig = buildPulseSignature(tapTimestampsMs, start, audioDurationSec, refineAnswers);
     const wf = buildPulseWaveform(tapTimestampsMs, start, audioDurationSec);
     setPulseSignature(sig);
     setPulseWaveform(wf);
-    setTasteSummary(mergeTasteWithComment(buildTasteSummary(sig), refineComment));
-  }, [tapTimestampsMs, sessionStartMs, audioDurationSec, refineAnswers, refineComment]);
+    setTasteSummary(
+      mergeTasteWithSectionComments(
+        buildTasteSummary(sig, refineAnswers.selectedTags),
+        refineAnswers.sectionComments
+      )
+    );
+  }, [tapTimestampsMs, sessionStartMs, audioDurationSec, refineAnswers]);
 
   const commitPulseSignature = useCallback(
-    (answers: RefineAnswers, comment: string) => {
+    (answers: RefineAnswers) => {
       setRefineAnswers(answers);
-      setRefineComment(comment);
       const start = sessionStartMs ?? Date.now();
-      const sig = buildPulseSignature(
-        tapTimestampsMs,
-        start,
-        audioDurationSec,
-        answers,
-        comment
-      );
+      const sig = buildPulseSignature(tapTimestampsMs, start, audioDurationSec, answers);
       const wf = buildPulseWaveform(tapTimestampsMs, start, audioDurationSec);
       setPulseSignature(sig);
       setPulseWaveform(wf);
-      setTasteSummary(mergeTasteWithComment(buildTasteSummary(sig), comment));
+      setTasteSummary(
+        mergeTasteWithSectionComments(
+          buildTasteSummary(sig, answers.selectedTags),
+          answers.sectionComments
+        )
+      );
     },
     [tapTimestampsMs, sessionStartMs, audioDurationSec]
   );
@@ -247,6 +284,8 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
         pulseWaveform: null,
         tasteSummary: null,
         refineCommentSnapshot: null,
+        refineSectionCommentsSnapshot: null,
+        refineTagsSnapshot: null,
       };
       setLoggedEvents((prev) => {
         const next = [row, ...prev];
@@ -258,8 +297,10 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       setSessionSeed(`s_${Date.now()}_${id}`);
       setAudioDurationSec(e.audio.durationSec);
       resetTaps();
-      setRefineAnswers(defaultRefine);
-      setRefineComment('');
+      setRefineAnswers({
+        selectedTags: inferGenreTagsFromArtist(e.artist.trim(), e.audio.title),
+        sectionComments: { ...EMPTY_REFINE_SECTION_COMMENTS },
+      });
       return id;
     },
     [persistLogged, resetTaps]
@@ -279,8 +320,10 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       });
       setSessionSeed(`s_${Date.now()}_${eventId}`);
       resetTaps();
-      setRefineAnswers({ ...defaultRefine });
-      setRefineComment('');
+      setRefineAnswers({
+        selectedTags: inferGenreTagsFromArtist(ev.artist, ev.audioTitle),
+        sectionComments: { ...EMPTY_REFINE_SECTION_COMMENTS },
+      });
     },
     [loggedEvents, resetTaps]
   );
@@ -291,7 +334,16 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
 
   const persistActiveEventOutcome = useCallback(() => {
     if (!activeEventId) return;
-    const commentSnap = refineComment.trim() || null;
+    const sc = refineAnswers.sectionComments;
+    const refineSectionCommentsSnapshot =
+      sc.sound.trim() || sc.energy.trim() || sc.experience.trim()
+        ? {
+            sound: sc.sound.trim() || null,
+            energy: sc.energy.trim() || null,
+            experience: sc.experience.trim() || null,
+          }
+        : null;
+    const tagSnap = refineAnswers.selectedTags.length ? [...refineAnswers.selectedTags] : null;
     setLoggedEvents((prev) => {
       const next = prev.map((row) =>
         row.id === activeEventId
@@ -300,14 +352,24 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
               pulseSignature,
               pulseWaveform,
               tasteSummary,
-              refineCommentSnapshot: commentSnap,
+              refineCommentSnapshot: null,
+              refineSectionCommentsSnapshot,
+              refineTagsSnapshot: tagSnap,
             }
           : row
       );
       persistLogged(next);
       return next;
     });
-  }, [activeEventId, pulseSignature, pulseWaveform, tasteSummary, refineComment, persistLogged]);
+  }, [
+    activeEventId,
+    pulseSignature,
+    pulseWaveform,
+    tasteSummary,
+    refineAnswers.sectionComments,
+    refineAnswers.selectedTags,
+    persistLogged,
+  ]);
 
   const deleteLoggedEvent = useCallback(
     (eventId: string) => {
@@ -325,7 +387,6 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
     setTapTimestamps([]);
     setSessionStartMs(null);
     setRefineAnswers(defaultRefine);
-    setRefineComment('');
     setPulseSignature(null);
     setPulseWaveform(null);
     setTasteSummary(null);
@@ -347,8 +408,6 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       setAudioDurationSec,
       refineAnswers,
       setRefineAnswers,
-      refineComment,
-      setRefineComment,
       pulseSignature,
       pulseWaveform,
       tasteSummary,
@@ -373,7 +432,6 @@ export function PulseProvider({ children }: { children: React.ReactNode }) {
       resetTaps,
       audioDurationSec,
       refineAnswers,
-      refineComment,
       pulseSignature,
       pulseWaveform,
       tasteSummary,
