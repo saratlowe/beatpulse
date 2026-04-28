@@ -35,9 +35,133 @@ const HELIX_DUR_SEC = [373, 420, 380, 395, 410, 388, 402, 375, 418, 360, 392, 40
 type DemoCatalogRow = AudioSet & { searchBlob: string };
 
 /**
- * Hit EDM titles for search / UX demo. Playback streams are SoundHelix placeholders, not licensed masters.
+ * EDM demo search: bundled MP3s in `assets/audio/` (real files in the app) plus SoundHelix URL placeholders
+ * for classic hit metadata rows.
  */
 const EDM_DEMO_CATALOG_INTERNAL: DemoCatalogRow[] = [
+  {
+    id: 'edm-catalog-30s',
+    title: '30 seconds EDM',
+    artist: 'Demo clip',
+    /** Bundled copy of project asset `assets/audio/beatpulse-edm-30s.mp3` — resolved in TapSession. */
+    uri: 'beatpulse-asset://edm-catalog-30s',
+    durationSec: 33,
+    searchBlob:
+      '30 seconds edm thirty second half minute short clip demo beatpulse catalog preview set audio',
+  },
+  {
+    id: 'edm-catalog-alesso-heroes-spaceman',
+    title: 'Heroes (We Could Be) (JOYFIRE & Jake Royale Spaceman Edit)',
+    artist: 'Alesso',
+    uri: 'beatpulse-asset://edm-catalog-alesso-heroes-spaceman',
+    durationSec: 244,
+    searchBlob:
+      'alesso heroes we could be joyfire jake royale spaceman edit progressive house big room festival',
+  },
+  {
+    id: 'edm-catalog-alesso-pendulum-fade',
+    title: 'FADE',
+    artist: 'Alesso & Pendulum',
+    uri: 'beatpulse-asset://edm-catalog-alesso-pendulum-fade',
+    durationSec: 307,
+    searchBlob: 'alesso pendulum fade drum bass dnb progressive melbourne',
+  },
+  {
+    id: 'edm-catalog-anotr-talk-to-you',
+    title: 'Talk To You',
+    artist: 'ANOTR',
+    uri: 'beatpulse-asset://edm-catalog-anotr-talk-to-you',
+    durationSec: 307,
+    searchBlob: 'anotr talk to you house tech house groove amsterdam',
+  },
+  {
+    id: 'edm-catalog-armand-i-want-your-soul',
+    title: 'I Want Your Soul (AVH Rework)',
+    artist: 'Armand Van Helden',
+    uri: 'beatpulse-asset://edm-catalog-armand-i-want-your-soul',
+    durationSec: 154,
+    searchBlob: 'armand van helden i want your soul avh rework electro house classic',
+  },
+  {
+    id: 'edm-catalog-armin-on-on',
+    title: 'On & On',
+    artist: 'Armin van Buuren & Punctual',
+    uri: 'beatpulse-asset://edm-catalog-armin-on-on',
+    durationSec: 242,
+    searchBlob: 'armin van buuren punctual on and on trance progressive vocal',
+  },
+  {
+    id: 'edm-catalog-chris-lake-turn-off-lights',
+    title: 'Turn Off The Lights',
+    artist: 'Chris Lake',
+    uri: 'beatpulse-asset://edm-catalog-chris-lake-turn-off-lights',
+    durationSec: 293,
+    searchBlob: 'chris lake turn off the lights tech house bassline club',
+  },
+  {
+    id: 'edm-catalog-chris-lake-aluna-beggin',
+    title: "Beggin'",
+    artist: 'Chris Lake & Aluna',
+    uri: 'beatpulse-asset://edm-catalog-chris-lake-aluna-beggin',
+    durationSec: 328,
+    searchBlob: 'chris lake aluna beggin vocal house garage four tet adjacent',
+  },
+  {
+    id: 'edm-catalog-chris-lake-yuma',
+    title: 'In The Yuma',
+    artist: 'Chris Lake',
+    uri: 'beatpulse-asset://edm-catalog-chris-lake-yuma',
+    durationSec: 367,
+    searchBlob: 'chris lake in the yuma tech house yuma desert groove',
+  },
+  {
+    id: 'edm-catalog-bob-sinclar-world-hold-on',
+    title: 'World Hold On (FISHER Rework)',
+    artist: 'Bob Sinclar',
+    uri: 'beatpulse-asset://edm-catalog-bob-sinclar-world-hold-on',
+    durationSec: 333,
+    searchBlob: 'bob sinclar world hold on fisher rework house steve angello',
+  },
+  {
+    id: 'edm-catalog-daft-punk-around-world',
+    title: 'Around The World (Westend Remix)',
+    artist: 'Daft Punk',
+    uri: 'beatpulse-asset://edm-catalog-daft-punk-around-world',
+    durationSec: 300,
+    searchBlob: 'daft punk around the world westend remix french house tech house',
+  },
+  {
+    id: 'edm-catalog-guetta-titanium-jablonski',
+    title: 'Titanium (Jablonski Tantalizing Edit)',
+    artist: 'David Guetta',
+    uri: 'beatpulse-asset://edm-catalog-guetta-titanium-jablonski',
+    durationSec: 224,
+    searchBlob: 'david guetta titanium jablonski edit sia vocal electro big room',
+  },
+  {
+    id: 'edm-catalog-fisher-losing-it',
+    title: 'Losing It',
+    artist: 'FISHER',
+    uri: 'beatpulse-asset://edm-catalog-fisher-losing-it',
+    durationSec: 247,
+    searchBlob: 'fisher losing it tech house dirtybird festival anthem chris lake adjacent',
+  },
+  {
+    id: 'edm-catalog-john-summit-go-back',
+    title: 'Go Back',
+    artist: 'John Summit & Sub Focus & Julia Church',
+    uri: 'beatpulse-asset://edm-catalog-john-summit-go-back',
+    durationSec: 198,
+    searchBlob: 'john summit sub focus julia church go back dnb drum bass vocal',
+  },
+  {
+    id: 'edm-catalog-john-summit-all-the-time',
+    title: 'ALL THE TIME',
+    artist: 'John Summit, The Chainsmokers & Ilsey',
+    uri: 'beatpulse-asset://edm-catalog-john-summit-all-the-time',
+    durationSec: 226,
+    searchBlob: 'john summit chainsmokers ilsey all the time progressive house vocal radio',
+  },
   {
     id: 'edm-shm-dywc',
     title: "Don't You Worry Child",

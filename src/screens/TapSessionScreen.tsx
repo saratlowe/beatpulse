@@ -16,12 +16,11 @@ import {
   View,
 } from 'react-native';
 import { usePulse } from '../context/PulseContext';
-import {
-  BASELINE,
-  computeLiveMetersFromTaps,
-  decayTowardBaseline,
-  DECAY_MS,
-} from '../lib/tapLive';
+import { resolveBundledDemoPlaybackSource } from '../lib/bundledDemoAudio';
+import { computeLiveMetersFromTaps, decayTowardBaseline, DECAY_MS } from '../lib/tapLive';
+
+/** Meters decay here toward 0 when idle; tap mapping in tapLive.ts still uses its internal floor for peaks. */
+const IDLE_METER_TARGET = 0;
 import type { LogStackParamList, RootTabParamList } from '../navigation/types';
 import { colors, font } from '../theme';
 
@@ -59,8 +58,8 @@ export function TapSessionScreen({ navigation }: Props) {
   const [playing, setPlaying] = useState(false);
   /** True when the track has finished or is sitting at the end — center control shows Replay instead of Play */
   const [playbackEnded, setPlaybackEnded] = useState(false);
-  const [energy, setEnergy] = useState(BASELINE);
-  const [intensity, setIntensity] = useState(BASELINE);
+  const [energy, setEnergy] = useState(IDLE_METER_TARGET);
+  const [intensity, setIntensity] = useState(IDLE_METER_TARGET);
   const [loadError, setLoadError] = useState<string | null>(null);
   const lastTapAtRef = useRef(0);
   const [sparkTrail, setSparkTrail] = useState<number[]>([]);
@@ -106,8 +105,9 @@ export function TapSessionScreen({ navigation }: Props) {
           staysActiveInBackground: false,
         });
         await unload();
+        const source = resolveBundledDemoPlaybackSource(selectedAudio.uri);
         const { sound } = await Audio.Sound.createAsync(
-          { uri: selectedAudio.uri },
+          source,
           { shouldPlay: false, progressUpdateIntervalMillis: 250 },
           (status) => {
             if (!status.isLoaded) return;
@@ -155,8 +155,8 @@ export function TapSessionScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (tapTimestampsMs.length === 0) {
-      setEnergy(BASELINE);
-      setIntensity(BASELINE);
+      setEnergy(IDLE_METER_TARGET);
+      setIntensity(IDLE_METER_TARGET);
       setSparkTrail([]);
       return;
     }
@@ -173,8 +173,8 @@ export function TapSessionScreen({ navigation }: Props) {
       const now = Date.now();
       if (now - lastTapAtRef.current < 85) return;
       const factor = 0.91;
-      setEnergy((e) => Math.round(decayTowardBaseline(e, BASELINE, factor)));
-      setIntensity((i) => Math.round(decayTowardBaseline(i, BASELINE, factor)));
+      setEnergy((e) => Math.round(decayTowardBaseline(e, IDLE_METER_TARGET, factor)));
+      setIntensity((i) => Math.round(decayTowardBaseline(i, IDLE_METER_TARGET, factor)));
     }, DECAY_MS);
     return () => clearInterval(id);
   }, []);

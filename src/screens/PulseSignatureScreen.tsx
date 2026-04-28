@@ -40,6 +40,8 @@ export function PulseSignatureScreen({ navigation }: Props) {
   const s = Math.floor(total % 60);
   const totalLabel = `${m}:${s.toString().padStart(2, '0')}`;
   const half = total / 2;
+  /** Scroll padding 20×2 + card padding 16×2 — chart must not exceed inner card width */
+  const chartWidth = Math.max(120, Math.min(width - 72, 360));
 
   const goCrowd = () => {
     persistActiveEventOutcome();
@@ -63,7 +65,7 @@ export function PulseSignatureScreen({ navigation }: Props) {
           </Text>
           <PulseChart
             waveform={pulseWaveform ?? undefined}
-            width={Math.min(width - 56, 360)}
+            width={chartWidth}
             height={140}
             horizontalInset={16}
             timeLabels={[
@@ -129,6 +131,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
+    overflow: 'hidden',
   },
   emptyCard: {
     backgroundColor: colors.surface,

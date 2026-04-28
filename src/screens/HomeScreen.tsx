@@ -71,11 +71,11 @@ export function HomeScreen({ navigation }: Props) {
               {ev.audioTitle}
             </Text>
             {ev.pulseWaveform && ev.pulseWaveform.length > 1 ? (
-              <View style={{ marginTop: 12 }}>
+              <View style={[styles.chartClip, { marginTop: 12 }]}>
                 <MiniPulseBars samples={ev.pulseWaveform} barCount={36} />
               </View>
             ) : ev.pulseSignature && ev.pulseSignature.length > 0 ? (
-              <View style={{ marginTop: 12 }}>
+              <View style={[styles.chartClip, { marginTop: 12 }]}>
                 <MiniPulseBars vector={ev.pulseSignature} />
               </View>
             ) : (
@@ -128,7 +128,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
+    overflow: 'hidden',
   },
+  chartClip: { width: '100%', overflow: 'hidden', borderRadius: 10 },
   artist: { color: colors.text, fontSize: 18 },
   meta: { color: colors.muted, fontSize: 14, marginTop: 2 },
   audio: { color: colors.cyan, fontSize: 13, marginTop: 10 },

@@ -10,6 +10,9 @@ type Props = {
   barCount?: number;
 };
 
+/**
+ * Mini bar visualization — uses flex so the row never exceeds parent width (no horizontal spill).
+ */
 export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
   const heights = useMemo(() => {
     if (samples?.length) {
@@ -37,15 +40,23 @@ export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
 
   const maxH = 48;
   return (
-    <View style={{ width: '100%', overflow: 'hidden', borderRadius: 8 }}>
-      <View style={{ paddingHorizontal: 8, width: '100%' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 54, justifyContent: 'center' }}>
+    <View style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', borderRadius: 8 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-end',
+          height: 54,
+          width: '100%',
+          paddingHorizontal: 2,
+          gap: 2,
+        }}
+      >
         {heights.map((h, i) => (
           <View
             key={i}
             style={{
-              width: 5,
-              marginRight: i === heights.length - 1 ? 0 : 2,
+              flex: 1,
+              minWidth: 0,
               height: 4 + h * maxH,
               maxHeight: 52,
               backgroundColor: colors.accent,
@@ -54,7 +65,6 @@ export function MiniPulseBars({ vector, samples, barCount = 24 }: Props) {
             }}
           />
         ))}
-      </View>
       </View>
     </View>
   );

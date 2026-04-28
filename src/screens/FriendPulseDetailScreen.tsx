@@ -6,7 +6,12 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { MiniPulseBars } from '../components/MiniPulseBars';
 import { PulseChart } from '../components/PulseChart';
 import { usePulse } from '../context/PulseContext';
-import { explainFriendMatch, getFakeFriend } from '../lib/fakeFriends';
+import {
+  buildDiscoverJitterKey,
+  demoMatchPercentForSession,
+  explainFriendMatch,
+  getFakeFriend,
+} from '../lib/fakeFriends';
 import {
   blendPulseVectors,
   blendWaveforms,
@@ -55,7 +60,7 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
   }, [navigation, goBack, fromLogFlow]);
 
   const friend = getFakeFriend(friendId);
-  const { pulseSignature, pulseWaveform, loggedEvents } = usePulse();
+  const { pulseSignature, pulseWaveform, loggedEvents, sessionSeed } = usePulse();
 
   const completedSaved = useMemo(
     () => loggedEvents.filter((e) => e.pulseSignature && e.pulseSignature.length > 0),
@@ -72,12 +77,18 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
     [completedSaved]
   );
 
+  const discoverJitterKey = useMemo(
+    () => buildDiscoverJitterKey(loggedEvents, aggregateSig),
+    [loggedEvents, aggregateSig]
+  );
+
   /** Discover: typical pulse across all saved nights. Log flow: this session only. */
   const viewerSig = fromLogFlow ? pulseSignature : aggregateSig ?? latestSaved?.pulseSignature ?? pulseSignature;
   const viewerWave = fromLogFlow ? pulseWaveform : latestSaved?.pulseWaveform ?? pulseWaveform;
 
   const { width } = useWindowDimensions();
-  const chartW = Math.min(width - 40, 360);
+  /** content padding 20×2 + card padding 14×2 */
+  const chartW = Math.max(100, Math.min(width - 68, 360));
 
   if (!friend) {
     return (
@@ -91,8 +102,9 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
     );
   }
 
-  const explain = explainFriendMatch(viewerSig, friend);
-  const matchPct = friend.demoPulseMatchPercent;
+  const jitterKey = fromLogFlow ? sessionSeed : discoverJitterKey;
+  const explain = explainFriendMatch(viewerSig, friend, jitterKey);
+  const matchPct = demoMatchPercentForSession(friend, viewerSig?.length ? jitterKey : null);
   const blend = crowdDisplayBlendFromMatchPct(viewerSig?.length ? matchPct : 0);
   const friendWaveDisplay =
     viewerWave && viewerWave.length > 1
@@ -130,8 +142,8 @@ export function FriendPulseDetailScreen({ route, navigation }: Props) {
 
       <Text style={[styles.section, font('semibold')]}>{friend.name.split(' ')[0]}&apos;s waveform</Text>
       <Text style={[styles.caption, font('regular')]}>
-        Demo profile — the match % on the crowd list is fixed per person for this build; this curve blends toward yours
-        when that % is high so the side-by-side reads clearly, and stays distinct when it&apos;s low.
+        Demo profile — match % is fixed per person; the compare curve pulls toward yours in proportion to that % (so a
+        few points difference on the list reads as a small visual shift, not a cliff).
       </Text>
       <View style={styles.card}>
         <PulseChart waveform={friendWaveDisplay} width={chartW} height={120} horizontalInset={14} />
@@ -174,9 +186,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     marginBottom: 8,
+    overflow: 'hidden',
   },
   rowCompare: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  half: { flex: 1, backgroundColor: colors.surface, borderRadius: 14, padding: 12 },
+  half: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 12,
+    overflow: 'hidden',
+  },
   miniLab: { color: colors.muted, fontSize: 11, marginBottom: 8, textTransform: 'uppercase' },
   insight: {
     marginTop: 20,

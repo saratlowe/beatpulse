@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MiniPulseBars } from '../components/MiniPulseBars';
 import { usePulse, type LoggedEvent } from '../context/PulseContext';
 import { THEMED_EVENTS } from '../lib/data';
+import { buildDiscoverJitterKey } from '../lib/fakeFriends';
 import { crowdMatchScore, rankFakeFriends } from '../lib/crowdMatch';
 import { rankThemedEventsForUser } from '../lib/eventRec';
 import { buildAggregateProfilePulse, buildAggregateTasteSummary } from '../lib/pulse';
@@ -38,7 +39,15 @@ export function DiscoverScreen({ navigation }: Props) {
 
   const { pulse: profilePulse, taste: profileTaste, hasSavedShows } = useAggregateProfileFromLogs(loggedEvents);
 
-  const rankedFriends = useMemo(() => rankFakeFriends(profilePulse), [profilePulse]);
+  const discoverJitterKey = useMemo(
+    () => buildDiscoverJitterKey(loggedEvents, profilePulse),
+    [loggedEvents, profilePulse]
+  );
+
+  const rankedFriends = useMemo(
+    () => rankFakeFriends(profilePulse, discoverJitterKey),
+    [profilePulse, discoverJitterKey]
+  );
 
   const rankedEvents = useMemo(
     () => rankThemedEventsForUser(profilePulse, profileTaste, THEMED_EVENTS),
@@ -101,7 +110,9 @@ export function DiscoverScreen({ navigation }: Props) {
               <View style={[styles.avatar, { backgroundColor: u.avatarColor }]} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.name, font('semibold')]}>{u.name}</Text>
-                <Text style={[styles.match, font('bold')]}>{crowdMatchScore(profilePulse, u)}% pulse match</Text>
+                <Text style={[styles.match, font('bold')]}>
+                  {crowdMatchScore(profilePulse, u, discoverJitterKey)}% pulse match
+                </Text>
                 <Text style={[styles.reason, font('regular')]} numberOfLines={2}>
                   {u.tagline}
                 </Text>
@@ -188,6 +199,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
+    overflow: 'hidden',
   },
   heroLabel: { color: colors.muted, fontSize: 11, marginBottom: 8, textTransform: 'uppercase' },
   muted: { color: colors.muted, fontSize: 14, marginBottom: 12, lineHeight: 20 },

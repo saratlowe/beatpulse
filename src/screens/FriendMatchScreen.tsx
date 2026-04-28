@@ -12,10 +12,10 @@ import { colors, font } from '../theme';
 type Props = NativeStackScreenProps<LogStackParamList, 'FriendMatch'>;
 
 export function FriendMatchScreen({ navigation }: Props) {
-  const { pulseSignature, pulseWaveform, activeEventId, loggedEvents } = usePulse();
+  const { pulseSignature, pulseWaveform, activeEventId, loggedEvents, sessionSeed } = usePulse();
   const activeEvent = activeEventId ? loggedEvents.find((e) => e.id === activeEventId) : null;
   const noSharedCrowd = activeEvent?.importAudio === true;
-  const crowd = noSharedCrowd ? [] : rankFakeFriends(pulseSignature);
+  const crowd = noSharedCrowd ? [] : rankFakeFriends(pulseSignature, sessionSeed);
 
   const openFriendDetail = (friendId: string) => {
     navigation.navigate('FriendPulseDetail', { friendId, flow: 'log' });
@@ -28,7 +28,7 @@ export function FriendMatchScreen({ navigation }: Props) {
       <Text style={[styles.sub, font('regular')]}>
         {noSharedCrowd
           ? 'Crowd match uses a demo catalog tied to well-known tracks. Imported MP3s and personal files are not in that shared pool.'
-          : 'Demo crowd: each person has a fixed match % for this build (spread from high to low). Their mini graph blends toward your tap curve when the % is high so it reads like a real compare — tap someone for details, then back to continue.'}
+          : 'Demo crowd: fixed match % for this build. Mini graphs blend toward your taps in proportion to that number (close scores look close; big gaps look clearly different). Tap someone for details, then back to continue.'}
       </Text>
 
       <Pressable style={styles.backRow} onPress={() => navigation.goBack()}>
@@ -111,6 +111,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    overflow: 'hidden',
   },
   heroLabel: { color: colors.muted, fontSize: 12, marginBottom: 8, textTransform: 'uppercase' },
   warn: {
@@ -127,6 +128,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    overflow: 'hidden',
   },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   avatar: { width: 44, height: 44, borderRadius: 22 },

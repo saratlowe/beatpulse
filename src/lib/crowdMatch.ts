@@ -1,3 +1,5 @@
+import { demoMatchPercentForSession, type FakeFriend } from './fakeFriends';
+
 export {
   explainFriendMatch,
   FAKE_FRIENDS,
@@ -7,11 +9,11 @@ export {
   type RankedFakeFriend,
 } from './fakeFriends';
 
-/** 0–100 shown on cards — each fake friend carries a fixed demo %; wave blend follows it. */
+/** 0–100 on cards — same session offset as {@link rankFakeFriends}; wave blend follows this value. */
 export function crowdMatchScore(
   userPulse: number[] | null,
-  friend: { demoPulseMatchPercent: number }
+  friend: FakeFriend,
+  jitterKey?: string | null
 ): number {
-  if (!userPulse?.length) return 0;
-  return friend.demoPulseMatchPercent;
+  return demoMatchPercentForSession(friend, userPulse?.length ? jitterKey : null);
 }

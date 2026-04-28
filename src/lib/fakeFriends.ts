@@ -190,7 +190,8 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Even spread — reactions across the whole set.',
       taps: averyTaps,
       refine: rf(['House', 'High energy', 'Visuals carried']),
-      demoPulseMatchPercent: 91,
+      /** Tight steps vs next rows: similar “full-set” graphs → similar %; big drops only for sparse/chaos. */
+      demoPulseMatchPercent: 82,
     },
     {
       id: 'ff_maya',
@@ -208,7 +209,7 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Mid-set builder — long plateau, steady hands.',
       taps: jordanTaps,
       refine: rf(['Techno', 'Chill', 'Build-up heavy']),
-      demoPulseMatchPercent: 58,
+      demoPulseMatchPercent: 71,
     },
     {
       id: 'ff_riley',
@@ -217,7 +218,7 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Closing specialist — taps cluster after the turn.',
       taps: rileyTaps,
       refine: rf(['Melodic / Progressive', 'Euphoric', 'Drop-heavy']),
-      demoPulseMatchPercent: 44,
+      demoPulseMatchPercent: 66,
     },
     {
       id: 'ff_quinn',
@@ -226,7 +227,7 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Drop chaser — short bursts when the low end hits.',
       taps: quinnTaps,
       refine: rf(['Dubstep', 'Aggressive', 'Drop-heavy']),
-      demoPulseMatchPercent: 33,
+      demoPulseMatchPercent: 60,
     },
     {
       id: 'ff_noah',
@@ -235,7 +236,7 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Two long chapters — room to breathe, then commit.',
       taps: noahTaps,
       refine: rf(['Techno', 'Dark', 'Build-up heavy']),
-      demoPulseMatchPercent: 26,
+      demoPulseMatchPercent: 54,
     },
     {
       id: 'ff_sam',
@@ -244,7 +245,7 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Sparse & selective — a few intentional peaks.',
       taps: samTaps,
       refine: rf(['Experimental', 'Emotional', 'Intimate vibe']),
-      demoPulseMatchPercent: 17,
+      demoPulseMatchPercent: 34,
     },
     {
       id: 'ff_casey',
@@ -253,7 +254,7 @@ function buildRoster(): FakeFriend[] {
       tagline: 'Chaos enjoyer — taps land in unpredictable pockets.',
       taps: caseyTaps,
       refine: rf(['Drum & Bass', 'Unexpected transitions', 'Crowd was insane']),
-      demoPulseMatchPercent: 11,
+      demoPulseMatchPercent: 15,
     },
   ];
 
@@ -276,11 +277,61 @@ export const FAKE_FRIENDS: FakeFriend[] = buildRoster();
 
 export type RankedFakeFriend = FakeFriend & { similarityPercent: number };
 
-export function rankFakeFriends(userPulse: number[] | null): RankedFakeFriend[] {
+function djb2Hash(str: string): number {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 33) ^ str.charCodeAt(i)!;
+  }
+  return h >>> 0;
+}
+
+/**
+ * Same offset for every friend in a session so ordering stays identical while the whole ladder shifts slightly
+ * (e.g. Avery reads 78–87 depending on which set you logged).
+ */
+function sessionMatchOffset(jitterKey: string | null | undefined): number {
+  if (jitterKey == null || jitterKey === '') return 0;
+  const h = djb2Hash(jitterKey);
+  return (h % 11) - 5;
+}
+
+function clampMatchPct(n: number): number {
+  return Math.round(Math.max(8, Math.min(96, n)));
+}
+
+/** Display % for this session / Discover context — base demo % + small deterministic offset. */
+export function demoMatchPercentForSession(
+  friend: FakeFriend,
+  jitterKey: string | null | undefined
+): number {
+  return clampMatchPct(friend.demoPulseMatchPercent + sessionMatchOffset(jitterKey));
+}
+
+/** Stable key for Discover so % shift when your saved library or aggregate pulse changes. */
+export function buildDiscoverJitterKey(
+  loggedEvents: readonly { id: string; pulseSignature?: number[] | null | undefined }[],
+  aggregatePulse: number[] | null
+): string {
+  const ids = loggedEvents
+    .filter((e) => e.pulseSignature && e.pulseSignature.length > 0)
+    .map((e) => e.id)
+    .sort()
+    .join('|');
+  const sig =
+    aggregatePulse && aggregatePulse.length
+      ? aggregatePulse.map((n) => n.toFixed(3)).join(',')
+      : '';
+  return `discover:${ids}#${sig}`;
+}
+
+export function rankFakeFriends(
+  userPulse: number[] | null,
+  jitterKey?: string | null
+): RankedFakeFriend[] {
   const hasUser = !!userPulse?.length;
   return FAKE_FRIENDS.map((f) => ({
     ...f,
-    similarityPercent: hasUser ? f.demoPulseMatchPercent : 0,
+    similarityPercent: hasUser ? demoMatchPercentForSession(f, jitterKey) : 0,
   })).sort((a, b) => b.similarityPercent - a.similarityPercent);
 }
 
@@ -288,11 +339,15 @@ export function getFakeFriend(id: string): FakeFriend | undefined {
   return FAKE_FRIENDS.find((f) => f.id === id);
 }
 
-export function explainFriendMatch(userPulse: number[] | null, friend: FakeFriend): string {
+export function explainFriendMatch(
+  userPulse: number[] | null,
+  friend: FakeFriend,
+  jitterKey?: string | null
+): string {
   if (!userPulse?.length) {
     return 'Tap through a set first — then we can tell you how your energy lines up with this person.';
   }
-  const pct = friend.demoPulseMatchPercent;
+  const pct = demoMatchPercentForSession(friend, jitterKey);
   const first = friend.name.split(' ')[0] ?? friend.name;
   if (pct >= 70) {
     return `${pct}% pulse match — you and ${first} read as a strong fit in this lineup; the compare view leans their curve toward yours so it reads clearly.`;

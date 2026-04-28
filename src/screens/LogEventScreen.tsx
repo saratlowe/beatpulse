@@ -105,8 +105,8 @@ export function LogEventScreen({ navigation }: Props) {
 
       <Text style={[styles.section, font('semibold')]}>Set audio</Text>
       <Text style={[styles.hint, font('regular')]}>
-        Demo search lists well-known EDM hits for MVP discoverability; playback uses royalty-free SoundHelix
-        stand-ins, not the original masters. Your own files play as-is. On web, blob URLs reset after refresh.
+        Demo search includes bundled tracks (real MP3s in the app) and other rows that stream royalty-free
+        SoundHelix stand-ins for classic hit names. Your own uploads play as-is. On web, blob URLs reset after refresh.
       </Text>
 
       <Text style={[styles.subSection, font('semibold')]}>Search EDM demos</Text>

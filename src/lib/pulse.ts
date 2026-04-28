@@ -186,14 +186,12 @@ export function signatureMatchPercent(a: number[] | null | undefined, b: number[
   return Math.round(100 * clamp01(sim));
 }
 
-function smoothstep01(edge0: number, edge1: number, x: number): number {
-  const t = clamp01((x - edge0) / Math.max(1e-6, edge1 - edge0));
-  return t * t * (3 - 2 * t);
-}
-
-/** Display-only: high match % → blend friend visuals toward the user so curves look alike. */
+/**
+ * How strongly friend wave/bars blend toward the viewer (0 = friend only, 1 = match user).
+ * Linear in match % so a 72 vs 66 label reads as “a bit closer” on the graph, not a cliff.
+ */
 export function crowdDisplayBlendFromMatchPct(matchPct: number): number {
-  return smoothstep01(14, 76, matchPct);
+  return clamp01(matchPct / 100);
 }
 
 export function blendPulseVectors(
